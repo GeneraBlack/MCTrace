@@ -33,11 +33,17 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up JDK 25
+      - name: Set up JDK 25 (Toolchain)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '25'
+
+      - name: Set up JDK 21 (Gradle Daemon)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -46,30 +52,9 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build with Gradle
-        id: build
-        run: |
-          ./gradlew build --no-daemon --stacktrace > gradle-build.log 2>&1 || touch build_failed
+        run: ./gradlew build --no-daemon --stacktrace
 
-      - name: Report Build Results
-        run: |
-          echo "## Gradle Build Output" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          tail -n 250 gradle-build.log >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          if [ -f build_failed ]; then
-            echo "::error::Gradle build failed!"
-            exit 1
-          fi
 
-      - name: Push Build Log to Debug Branch
-        if: failure()
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git checkout -B debug-log
-          git add -f gradle-build.log
-          git commit -m "debug: capture gradle build log"
-          git push origin debug-log --force
 
       - name: Verify build artifacts
         run: |
