@@ -1,22 +1,45 @@
 package net.mctrace.mixin;
 
 import com.mojang.blaze3d.vulkan.VulkanGpuSurface;
+import java.nio.LongBuffer;
 import net.mctrace.MCTrace;
 import net.mctrace.config.MCTraceConfig;
 import org.lwjgl.vulkan.EXTSwapchainColorspace;
+import org.lwjgl.vulkan.KHRSurface;
+import org.lwjgl.vulkan.KHRSwapchain;
 import org.lwjgl.vulkan.VK10;
+import org.lwjgl.vulkan.VkAllocationCallbacks;
+import org.lwjgl.vulkan.VkDevice;
 import org.lwjgl.vulkan.VkSurfaceFormatKHR;
+import org.lwjgl.vulkan.VkSwapchainCreateInfoKHR;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(VulkanGpuSurface.class)
 public abstract class VulkanGpuSurfaceMixin {
 
+    private static int currentHdrFormat = 0;
+    private static int currentHdrColorSpace = 0;
+    private static int fallbackSdrFormat = VK10.VK_FORMAT_B8G8R8A8_UNORM;
+
     @Inject(method = "pickSwapchainSurfaceFormat", at = @At("HEAD"), cancellable = true)
     private void mctrace$pickHdrSwapchainFormat(VkSurfaceFormatKHR.Buffer formats, CallbackInfoReturnable<VkSurfaceFormatKHR> cir) {
+        // Cache available SDR fallback format first
+        for (int i = 0; i < formats.capacity(); i++) {
+            VkSurfaceFormatKHR format = formats.get(i);
+            if (format.colorSpace() == KHRSurface.VK_COLOR_SPACE_SRGB_NONLINEAR_KHR
+                    && (format.format() == VK10.VK_FORMAT_B8G8R8A8_UNORM || format.format() == VK10.VK_FORMAT_R8G8B8A8_UNORM)) {
+                fallbackSdrFormat = format.format();
+                break;
+            }
+        }
+
         if (!MCTraceConfig.enableHDR) {
+            currentHdrFormat = 0;
+            currentHdrColorSpace = 0;
             MCTraceConfig.isHdrActive = false;
             return;
         }
@@ -48,11 +71,75 @@ public abstract class VulkanGpuSurfaceMixin {
         }
 
         if (chosenFormat != null) {
+            currentHdrFormat = chosenFormat.format();
+            currentHdrColorSpace = chosenFormat.colorSpace();
             MCTraceConfig.isHdrActive = true;
             cir.setReturnValue(chosenFormat);
         } else {
+            currentHdrFormat = 0;
+            currentHdrColorSpace = 0;
             MCTraceConfig.isHdrActive = false;
             MCTrace.LOGGER.info("[MCTrace HDR] Monitor/OS does not report HDR swapchain surface format, falling back to SDR.");
         }
+    }
+
+    @Redirect(
+        method = "configure",
+        at = @At(
+            value = "INVOKE",
+            target = "Lorg/lwjgl/vulkan/VkSwapchainCreateInfoKHR;imageFormat(I)Lorg/lwjgl/vulkan/VkSwapchainCreateInfoKHR;"
+        )
+    )
+    private VkSwapchainCreateInfoKHR mctrace$redirectImageFormat(VkSwapchainCreateInfoKHR instance, int originalFormat) {
+        if (MCTraceConfig.isHdrActive && currentHdrFormat != 0) {
+            return instance.imageFormat(currentHdrFormat);
+        }
+        if (!MCTraceConfig.isHdrActive && fallbackSdrFormat != 0) {
+            return instance.imageFormat(fallbackSdrFormat);
+        }
+        return instance.imageFormat(originalFormat);
+    }
+
+    @Redirect(
+        method = "configure",
+        at = @At(
+            value = "INVOKE",
+            target = "Lorg/lwjgl/vulkan/VkSwapchainCreateInfoKHR;imageColorSpace(I)Lorg/lwjgl/vulkan/VkSwapchainCreateInfoKHR;"
+        )
+    )
+    private VkSwapchainCreateInfoKHR mctrace$redirectImageColorSpace(VkSwapchainCreateInfoKHR instance, int originalColorSpace) {
+        if (MCTraceConfig.isHdrActive && currentHdrColorSpace != 0) {
+            return instance.imageColorSpace(currentHdrColorSpace);
+        }
+        return instance.imageColorSpace(KHRSurface.VK_COLOR_SPACE_SRGB_NONLINEAR_KHR);
+    }
+
+    @Redirect(
+        method = "configure",
+        at = @At(
+            value = "INVOKE",
+            target = "Lorg/lwjgl/vulkan/KHRSwapchain;vkCreateSwapchainKHR(Lorg/lwjgl/vulkan/VkDevice;Lorg/lwjgl/vulkan/VkSwapchainCreateInfoKHR;Lorg/lwjgl/vulkan/VkAllocationCallbacks;Ljava/nio/LongBuffer;)I"
+        )
+    )
+    private int mctrace$createSwapchainWithFallback(
+        VkDevice device,
+        VkSwapchainCreateInfoKHR pCreateInfo,
+        VkAllocationCallbacks pAllocator,
+        LongBuffer pSwapchain
+    ) {
+        int res = KHRSwapchain.vkCreateSwapchainKHR(device, pCreateInfo, pAllocator, pSwapchain);
+        if (res != VK10.VK_SUCCESS && MCTraceConfig.isHdrActive) {
+            MCTrace.LOGGER.warn("[MCTrace HDR] vkCreateSwapchainKHR failed (result: {}). Falling back to SDR format.", res);
+            MCTraceConfig.isHdrActive = false;
+            currentHdrFormat = 0;
+            currentHdrColorSpace = 0;
+            pCreateInfo.imageFormat(fallbackSdrFormat != 0 ? fallbackSdrFormat : VK10.VK_FORMAT_B8G8R8A8_UNORM);
+            pCreateInfo.imageColorSpace(KHRSurface.VK_COLOR_SPACE_SRGB_NONLINEAR_KHR);
+            res = KHRSwapchain.vkCreateSwapchainKHR(device, pCreateInfo, pAllocator, pSwapchain);
+            if (res == VK10.VK_SUCCESS) {
+                MCTrace.LOGGER.info("[MCTrace HDR] Successfully recovered and created SDR swapchain.");
+            }
+        }
+        return res;
     }
 }
