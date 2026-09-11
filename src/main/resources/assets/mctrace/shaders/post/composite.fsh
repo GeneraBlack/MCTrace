@@ -3,11 +3,6 @@
 uniform sampler2D MainSampler;
 uniform sampler2D MainDepthSampler;
 
-layout(std140) uniform SamplerInfo {
-    vec2 OutSize;
-    vec2 InSize;
-};
-
 in vec2 texCoord;
 
 out vec4 fragColor;
@@ -39,6 +34,9 @@ void main() {
         return;
     }
 
+    vec2 InSize = vec2(textureSize(MainSampler, 0));
+    vec2 texel = 1.0 / InSize;
+
     // Surface normal reconstruction from screen-space depth gradients
     vec3 pos = getPosition(texCoord);
     vec3 dx = dFdx(pos);
@@ -52,10 +50,9 @@ void main() {
     vec3 sunDir = normalize(vec3(0.4, 0.85, 0.35));
     float NdotL = max(dot(normal, sunDir), 0.0);
 
-    // Multi-tap Screen Space Ambient Occlusion (SSAO)
+    // Multi-tap Screen Space Ambient Occlusion (SSAO) with pronounced corner darkening
     float ao = 0.0;
-    vec2 texel = 1.0 / InSize;
-    float radius = 3.5 * texel.x;
+    float radius = 4.5 * texel.x;
     
     vec2 samples[8] = vec2[](
         vec2( 1.0,  0.0), vec2(-1.0,  0.0),
@@ -65,24 +62,24 @@ void main() {
     );
 
     for (int i = 0; i < 8; i++) {
-        vec2 sampleUv = texCoord + samples[i] * radius * 8.0;
+        vec2 sampleUv = texCoord + samples[i] * radius * 10.0;
         float sampleDepth = linearizeDepth(texture(MainDepthSampler, sampleUv).r);
         float diff = depth - sampleDepth;
-        if (diff > 0.03 && diff < 1.2) {
-            ao += 1.0 - smoothstep(0.03, 1.2, diff);
+        if (diff > 0.02 && diff < 1.4) {
+            ao += 1.0 - smoothstep(0.02, 1.4, diff);
         }
     }
-    float aoFactor = clamp(1.0 - (ao / 8.0) * 1.5, 0.2, 1.0);
+    float aoFactor = clamp(1.0 - (ao / 8.0) * 2.2, 0.15, 1.0);
 
     // Screen Space Contact Shadow
     float shadow = 1.0;
-    vec2 shadowStep = sunDir.xy * texel * 3.5;
-    for (int s = 1; s <= 4; s++) {
+    vec2 shadowStep = sunDir.xy * texel * 4.0;
+    for (int s = 1; s <= 5; s++) {
         vec2 sampleUv = texCoord + shadowStep * float(s);
         float stepDepth = linearizeDepth(texture(MainDepthSampler, sampleUv).r);
         float depthDiff = depth - stepDepth;
-        if (depthDiff > 0.04 && depthDiff < 0.8) {
-            shadow = 0.45;
+        if (depthDiff > 0.03 && depthDiff < 0.9) {
+            shadow = 0.35;
             break;
         }
     }
@@ -91,13 +88,13 @@ void main() {
     vec3 viewDir = normalize(-pos);
     vec3 halfDir = normalize(sunDir + viewDir);
     float NdotH = max(dot(normal, halfDir), 0.0);
-    float specular = pow(NdotH, 24.0) * 0.35 * shadow;
+    float specular = pow(NdotH, 32.0) * 0.45 * shadow;
 
     // Ambient + Direct Light synthesis
-    vec3 ambientColor = vec3(0.40, 0.46, 0.58) * 1.1;
-    vec3 sunLightColor = vec3(1.45, 1.35, 1.15);
+    vec3 ambientColor = vec3(0.35, 0.42, 0.58) * 1.2;
+    vec3 sunLightColor = vec3(1.50, 1.38, 1.12);
 
-    vec3 diffuse = albedo.rgb * (ambientColor * aoFactor + sunLightColor * (NdotL * 0.8 + 0.2) * shadow);
+    vec3 diffuse = albedo.rgb * (ambientColor * aoFactor + sunLightColor * (NdotL * 0.9 + 0.1) * shadow);
     vec3 combined = diffuse + vec3(specular);
 
     // Filmic tone mapping (Reinhard-Jodie)

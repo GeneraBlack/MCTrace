@@ -8,11 +8,11 @@
             "fragment_shader": "mctrace:post/composite",
             "inputs": [
                 {
-                    "sampler_name": "MainSampler",
+                    "sampler_name": "Main",
                     "target": "minecraft:main"
                 },
                 {
-                    "sampler_name": "MainDepthSampler",
+                    "sampler_name": "MainDepth",
                     "target": "minecraft:main",
                     "use_depth_buffer": true
                 }
