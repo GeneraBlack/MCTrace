@@ -15,6 +15,8 @@ import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.fml.ModContainer;
+import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import org.slf4j.Logger;
 
 @Mod(value = MCTrace.MODID, dist = Dist.CLIENT)
@@ -23,7 +25,7 @@ public class MCTrace {
     public static final String NAME = "MCTrace";
     public static final Logger LOGGER = LogUtils.getLogger();
 
-    public MCTrace(IEventBus modEventBus) {
+    public MCTrace(IEventBus modEventBus, ModContainer modContainer) {
         LOGGER.info("[MCTrace] Initializing next-gen Vulkan RT & FSR engine...");
 
         // Register client lifecycle and keybind events
@@ -32,6 +34,12 @@ public class MCTrace {
 
         // Register game loop tick event
         NeoForge.EVENT_BUS.addListener(this::onClientTick);
+
+        // Register Config screen factory for the NeoForge "Mods" tab
+        modContainer.registerExtensionPoint(
+                IConfigScreenFactory.class,
+                (container, lastScreen) -> new MCTraceConfigScreen(lastScreen)
+        );
     }
 
     private void onClientSetup(final FMLClientSetupEvent event) {
