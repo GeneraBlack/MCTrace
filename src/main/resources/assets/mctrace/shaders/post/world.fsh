@@ -455,8 +455,8 @@ void main() {
     // 6b. Atmospheric Crepuscular God Rays & Volumetric Aerial Perspective
     if (enableGodRays > 0.5 || enableFog > 0.5) {
         float cosTheta = dot(viewDir, sunDir);
-        // God rays only appear when looking towards the sun
-        float sunFacing = clamp((cosTheta - 0.20) / 0.40, 0.0, 1.0);
+        // God rays only appear when looking directly towards the sun (within ~45 degrees)
+        float sunFacing = clamp((cosTheta - 0.70) / 0.25, 0.0, 1.0);
 
         // Day/night and sunset celestial progression
         float sunElev = sin(skyAngle * 2.0 * PI);
@@ -464,7 +464,7 @@ void main() {
         float sunsetWeight = clamp(1.0 - abs(sunElev) * 4.5, 0.0, 1.0) * (1.0 - rainLevel);
 
         vec3 godRayColor = vec3(0.0);
-        if (enableGodRays > 0.5 && sunFacing > 0.001 && dayWeight > 0.001) {
+        if (enableGodRays > 0.5 && sunFacing > 0.001 && dayWeight > 0.001 && !isSky) {
             vec2 sunScreen = vec2(0.5, 0.5) + (sunDir.xy / max(sunDir.z + 1.0, 0.2)) * 0.5;
             vec2 rayStep = (sunScreen - texCoord) / 12.0;
             float godRayAccum = 0.0;
@@ -481,7 +481,8 @@ void main() {
             godRayAccum /= 12.0;
             float phase = henyeyGreenstein(cosTheta, 0.72);
             vec3 godRayTint = mix(vec3(1.0, 0.92, 0.78), vec3(1.0, 0.55, 0.20), sunsetWeight);
-            godRayColor = godRayTint * (godRayAccum * phase * 16.0 * godRaysIntensity * sunFacing * dayWeight);
+            // Gentle, realistic translucent sunbeams (max ~0.10 intensity, zero whiteout)
+            godRayColor = godRayTint * (godRayAccum * phase * 0.08 * godRaysIntensity * sunFacing * dayWeight);
         }
 
         // Atmospheric Distance Aerial Perspective & Fog
@@ -489,21 +490,26 @@ void main() {
             float fogDist = length(pos);
 
             // In clear weather (rainLevel == 0.0), the immediate and medium distance is 100% crisp.
-            // Fog begins only at distance (72 blocks) to simulate natural atmospheric aerial perspective.
+            // Fog begins only at distance (96 blocks / 6 chunks) to simulate natural atmospheric aerial perspective.
             // During rain/storm, start distance contracts and extinction density increases.
-            float clearStartDist = 72.0;
-            float rainStartDist = 12.0;
+            float clearStartDist = 96.0;
+            float rainStartDist = 16.0;
             float startDist = mix(clearStartDist, rainStartDist, rainLevel);
             float effectiveDist = max(fogDist - startDist, 0.0);
 
             // Subtle aerial extinction in clear weather; atmospheric mist in rain/storm
-            float clearExtinction = 0.0006;
-            float rainExtinction = 0.0060;
+            float clearExtinction = 0.0003;
+            float rainExtinction = 0.0050;
             float weatherExtinction = mix(clearExtinction, rainExtinction, clamp(rainLevel + thunderLevel * 0.4, 0.0, 1.0));
             float fogAmount = 1.0 - exp(-effectiveDist * weatherExtinction * fogDensity);
 
+            // In clear weather, cap aerial haze so distant mountains and forests are ALWAYS visible
+            if (rainLevel < 0.1) {
+                fogAmount = min(fogAmount, 0.25);
+            }
+
             // Sky & Horizon Color Synthesis
-            vec3 dayFogColor = mix(vec3(0.68, 0.80, 0.96), vec3(1.0, 0.90, 0.72), max(cosTheta, 0.0) * 0.45);
+            vec3 dayFogColor = mix(vec3(0.68, 0.80, 0.96), vec3(0.95, 0.90, 0.82), max(cosTheta, 0.0) * 0.35);
             vec3 nightFogColor = vec3(0.02, 0.035, 0.07);
             vec3 sunsetFogColor = vec3(0.98, 0.52, 0.18);
             vec3 stormFogColor = vec3(0.38, 0.42, 0.48) * (0.30 + dayWeight * 0.70);
@@ -521,7 +527,7 @@ void main() {
             shaded = mix(shaded, fogColor, fogAmount);
         }
 
-        if (enableGodRays > 0.5) {
+        if (enableGodRays > 0.5 && !isSky) {
             shaded += godRayColor;
         }
     }
