@@ -1,16 +1,26 @@
 package net.mctrace.vulkan;
 
 import net.mctrace.MCTrace;
+import org.lwjgl.vulkan.VkDevice;
 
 public class VulkanCapabilities {
 
     private static boolean vulkanInitialized = false;
+    private static VkDevice activeDevice = null;
     private static boolean rayQuerySupported = false;
     private static boolean rayTracingPipelineSupported = false;
     private static boolean accelerationStructureSupported = false;
     private static boolean bufferDeviceAddressSupported = false;
     private static boolean descriptorIndexingSupported = false;
     private static boolean meshShaderSupported = false;
+
+    public static VkDevice getActiveDevice() {
+        return activeDevice;
+    }
+
+    public static void setActiveDevice(VkDevice device) {
+        activeDevice = device;
+    }
 
     private static String gpuDeviceName = "Unknown GPU";
     private static String driverVersion = "Unknown Driver";

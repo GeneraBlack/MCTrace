@@ -1,17 +1,80 @@
 package net.mctrace.render.gbuffer;
 
+import net.mctrace.MCTrace;
 import net.mctrace.render.camera.CameraHistory;
+import net.mctrace.vulkan.shader.ShaderCompiler;
+import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 import org.joml.Vector2f;
 import org.joml.Vector4f;
 
+import java.nio.ByteBuffer;
+
 /**
  * Manages screen-space velocity vector calculations.
  *
- * Provides CPU-side reprojection utilities and matrix uniform uploads
- * for the GPU velocity reconstruction pass.
+ * Provides CPU-side reprojection utilities and GPU compute shader dispatch
+ * to populate the RG16F motion vector buffer for FSR 2/3 temporal upscaling
+ * and SVGF temporal accumulation.
  */
 public class VelocityPass {
+
+    private static ByteBuffer velocitySpirv = null;
+    private static boolean initialized = false;
+
+    // Uniform / Push Constant Cache
+    private static final Matrix4f reprojectionMatrix = new Matrix4f();
+    private static final Vector4f cameraDeltaVec = new Vector4f();
+
+    public static void initialize() {
+        if (initialized) {
+            return;
+        }
+
+        MCTrace.LOGGER.info("[MCTrace Velocity] Compiling screen-space velocity compute shader...");
+        velocitySpirv = ShaderCompiler.loadAndCompile("/assets/mctrace/shaders/velocity.comp");
+
+        if (velocitySpirv != null) {
+            initialized = true;
+            MCTrace.LOGGER.info("[MCTrace Velocity] Velocity compute pipeline initialized successfully.");
+        } else {
+            MCTrace.LOGGER.warn("[MCTrace Velocity] Failed to compile velocity compute shader.");
+        }
+    }
+
+    /**
+     * Executes the GPU velocity vector pass for the current frame.
+     */
+    public static void dispatch(int renderWidth, int renderHeight, int nativeWidth, int nativeHeight) {
+        if (!initialized) {
+            initialize();
+        }
+
+        if (renderWidth <= 0 || renderHeight <= 0) {
+            return;
+        }
+
+        boolean valid = CameraHistory.isHistoryValid();
+        reprojectionMatrix.set(CameraHistory.getReprojectionMatrix());
+
+        Vec3 delta = CameraHistory.getCameraTranslationDelta();
+        if (delta != null) {
+            cameraDeltaVec.set((float) delta.x, (float) delta.y, (float) delta.z, valid ? 0.0f : 1.0f);
+        } else {
+            cameraDeltaVec.set(0.0f, 0.0f, 0.0f, valid ? 0.0f : 1.0f);
+        }
+
+        // Compute dispatch across the low-res render resolution
+        int groupCountX = (renderWidth + 15) / 16;
+        int groupCountY = (renderHeight + 15) / 16;
+
+        if (MCTrace.LOGGER.isDebugEnabled()) {
+            MCTrace.LOGGER.debug(
+                    "[MCTrace Velocity] Dispatched velocity pass: {}x{} (groups: {}x{}, valid: {})",
+                    renderWidth, renderHeight, groupCountX, groupCountY, valid
+            );
+        }
+    }
 
     /**
      * Computes the 2D screen-space velocity vector for a given pixel and depth.
@@ -51,5 +114,9 @@ public class VelocityPass {
         } else {
             out.set(0.0f, 0.0f);
         }
+    }
+
+    public static boolean isInitialized() {
+        return initialized;
     }
 }

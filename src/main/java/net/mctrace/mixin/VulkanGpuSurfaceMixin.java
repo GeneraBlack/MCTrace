@@ -133,6 +133,7 @@ public abstract class VulkanGpuSurfaceMixin {
         VkAllocationCallbacks pAllocator,
         LongBuffer pSwapchain
     ) {
+        net.mctrace.vulkan.VulkanCapabilities.setActiveDevice(device);
         int res = KHRSwapchain.vkCreateSwapchainKHR(device, pCreateInfo, pAllocator, pSwapchain);
         if (res != VK10.VK_SUCCESS && MCTraceConfig.isHdrActive) {
             MCTrace.LOGGER.warn("[MCTrace HDR] vkCreateSwapchainKHR failed (result: {}). Falling back to SDR format.", res);

@@ -1,0 +1,48 @@
+#version 460
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(binding = 0, set = 0) uniform sampler2D depthTexture;
+layout(binding = 1, set = 0, rg16f) writeonly uniform image2D outVelocity;
+
+layout(push_constant) uniform VelocityPushConstants {
+    mat4 reprojectionMatrix; // prevViewProj * currInvViewProj
+    vec4 cameraDelta;        // xyz = camera translation, w = resetHistory
+    ivec4 resolution;        // x = renderWidth, y = renderHeight, z = nativeWidth, w = nativeHeight
+} pc;
+
+void main() {
+    ivec2 pixelCoord = ivec2(gl_GlobalInvocationID.xy);
+    if (pixelCoord.x >= pc.resolution.x || pixelCoord.y >= pc.resolution.y) {
+        return;
+    }
+
+    // Reset history signal: zero motion vector
+    if (pc.cameraDelta.w > 0.5) {
+        imageStore(outVelocity, pixelCoord, vec4(0.0, 0.0, 0.0, 0.0));
+        return;
+    }
+
+    vec2 uv = (vec2(pixelCoord) + 0.5) / vec2(pc.resolution.xy);
+    float depth = texture(depthTexture, uv).r;
+
+    // Sky / Far plane: project with near-far depth so camera rotation still reprojects sky
+    if (depth >= 1.0) {
+        depth = 0.99999;
+    }
+
+    // Current clip space position (Vulkan NDC: X in [-1, 1], Y in [-1, 1], Z in [0, 1])
+    vec4 currClip = vec4(uv.x * 2.0 - 1.0, (1.0 - uv.y) * 2.0 - 1.0, depth, 1.0);
+
+    // Reproject to previous clip space: Clip_prev = ReprojectionMatrix * Clip_curr
+    vec4 prevClip = pc.reprojectionMatrix * currClip;
+
+    vec2 velocity = vec2(0.0);
+    if (prevClip.w != 0.0) {
+        vec2 prevNdc = prevClip.xy / prevClip.w;
+        vec2 prevUv = vec2(prevNdc.x * 0.5 + 0.5, 1.0 - (prevNdc.y * 0.5 + 0.5));
+        velocity = uv - prevUv;
+    }
+
+    // Store per-pixel 2D motion vector into RG16F buffer
+    imageStore(outVelocity, pixelCoord, vec4(velocity, 0.0, 0.0));
+}
