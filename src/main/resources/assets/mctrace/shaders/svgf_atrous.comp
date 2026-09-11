@@ -1,0 +1,93 @@
+#version 460
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(binding = 0, set = 0) uniform sampler2D inputIllumTexture;
+layout(binding = 1, set = 0) uniform sampler2D momentsTexture;
+layout(binding = 2, set = 0) uniform sampler2D depthTexture;
+layout(binding = 3, set = 0) uniform sampler2D normalTexture;
+
+layout(binding = 4, set = 0, rgba16f) writeonly uniform image2D outFilteredIllum;
+
+layout(push_constant) uniform PushConstants {
+    int renderWidth;
+    int renderHeight;
+    int stepSize;       // 1, 2, 4 for a-trous wavelet hierarchy
+    float phiColor;
+    float phiNormal;
+    float phiDepth;
+} pc;
+
+const float kernel1D[5] = float[5](1.0 / 16.0, 1.0 / 4.0, 3.0 / 8.0, 1.0 / 4.0, 1.0 / 16.0);
+
+float luminance(vec3 color) {
+    return dot(color, vec3(0.2126, 0.7152, 0.0722));
+}
+
+void main() {
+    ivec2 centerCoord = ivec2(gl_GlobalInvocationID.xy);
+    if (centerCoord.x >= pc.renderWidth || centerCoord.y >= pc.renderHeight) {
+        return;
+    }
+
+    vec2 centerUv = (vec2(centerCoord) + 0.5) / vec2(pc.renderWidth, pc.renderHeight);
+    vec4 centerIllum = texture(inputIllumTexture, centerUv);
+    float centerDepth = texture(depthTexture, centerUv).r;
+    vec3 centerNormal = texture(normalTexture, centerUv).xyz;
+
+    if (centerDepth >= 1.0) {
+        imageStore(outFilteredIllum, centerCoord, centerIllum);
+        return;
+    }
+
+    vec2 moments = texture(momentsTexture, centerUv).rg;
+    float variance = max(0.0, moments.y - moments.x * moments.x);
+    float centerLum = luminance(centerIllum.rgb);
+
+    float totalWeight = 0.0;
+    vec4 filteredColor = vec4(0.0);
+
+    float sigmaL = max(0.01, pc.phiColor * sqrt(variance) + 0.0001);
+    float sigmaN = pc.phiNormal;
+    float sigmaZ = pc.phiDepth;
+
+    for (int y = -2; y <= 2; y++) {
+        for (int x = -2; x <= 2; x++) {
+            ivec2 sampleCoord = centerCoord + ivec2(x, y) * pc.stepSize;
+
+            if (sampleCoord.x < 0 || sampleCoord.x >= pc.renderWidth ||
+                sampleCoord.y < 0 || sampleCoord.y >= pc.renderHeight) {
+                continue;
+            }
+
+            vec2 sampleUv = (vec2(sampleCoord) + 0.5) / vec2(pc.renderWidth, pc.renderHeight);
+            vec4 sampleIllum = texture(inputIllumTexture, sampleUv);
+            float sampleDepth = texture(depthTexture, sampleUv).r;
+            vec3 sampleNormal = texture(normalTexture, sampleUv).xyz;
+
+            float kernelWeight = kernel1D[x + 2] * kernel1D[y + 2];
+
+            // 1. Color / Luminance weight
+            float sampleLum = luminance(sampleIllum.rgb);
+            float wL = exp(-abs(centerLum - sampleLum) / sigmaL);
+
+            // 2. Normal weight
+            float wN = pow(max(0.0, dot(centerNormal, sampleNormal)), sigmaN);
+
+            // 3. Depth weight
+            float wZ = exp(-abs(centerDepth - sampleDepth) / (sigmaZ * max(centerDepth, 0.001)));
+
+            float weight = kernelWeight * wL * wN * wZ;
+
+            filteredColor += sampleIllum * weight;
+            totalWeight += weight;
+        }
+    }
+
+    if (totalWeight > 0.00001) {
+        filteredColor /= totalWeight;
+    } else {
+        filteredColor = centerIllum;
+    }
+
+    imageStore(outFilteredIllum, centerCoord, filteredColor);
+}

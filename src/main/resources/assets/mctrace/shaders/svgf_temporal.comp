@@ -1,0 +1,88 @@
+#version 460
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(binding = 0, set = 0) uniform sampler2D currentIllumTexture;
+layout(binding = 1, set = 0) uniform sampler2D prevIllumTexture;
+layout(binding = 2, set = 0) uniform sampler2D velocityTexture;
+layout(binding = 3, set = 0) uniform sampler2D currentDepthTexture;
+layout(binding = 4, set = 0) uniform sampler2D prevDepthTexture;
+layout(binding = 5, set = 0) uniform sampler2D currentNormalTexture;
+layout(binding = 6, set = 0) uniform sampler2D prevNormalTexture;
+layout(binding = 7, set = 0) uniform sampler2D historyLengthTexture;
+
+layout(binding = 8, set = 0, rgba16f) writeonly uniform image2D outAccumulated;
+layout(binding = 9, set = 0, rg16f)   writeonly uniform image2D outMoments;
+layout(binding = 10, set = 0, r16f)   writeonly uniform image2D outHistoryLength;
+
+layout(push_constant) uniform PushConstants {
+    int renderWidth;
+    int renderHeight;
+    int resetHistory;
+} pc;
+
+float luminance(vec3 color) {
+    return dot(color, vec3(0.2126, 0.7152, 0.0722));
+}
+
+void main() {
+    ivec2 pixelCoord = ivec2(gl_GlobalInvocationID.xy);
+    if (pixelCoord.x >= pc.renderWidth || pixelCoord.y >= pc.renderHeight) {
+        return;
+    }
+
+    vec2 uv = (vec2(pixelCoord) + 0.5) / vec2(pc.renderWidth, pc.renderHeight);
+    vec4 currIllum = texture(currentIllumTexture, uv);
+    float currDepth = texture(currentDepthTexture, uv).r;
+    vec3 currNormal = texture(currentNormalTexture, uv).xyz;
+
+    if (currDepth >= 1.0) {
+        // Sky
+        imageStore(outAccumulated, pixelCoord, currIllum);
+        imageStore(outMoments, pixelCoord, vec4(0.0));
+        imageStore(outHistoryLength, pixelCoord, vec4(0.0));
+        return;
+    }
+
+    vec2 velocity = texture(velocityTexture, uv).xy;
+    vec2 prevUv = uv - velocity;
+
+    bool validHistory = (pc.resetHistory == 0) &&
+                        (prevUv.x >= 0.0 && prevUv.x <= 1.0 && prevUv.y >= 0.0 && prevUv.y <= 1.0);
+
+    if (validHistory) {
+        float prevDepth = texture(prevDepthTexture, prevUv).r;
+        vec3 prevNormal = texture(prevNormalTexture, prevUv).xyz;
+
+        // Disocclusion checks
+        float depthDiff = abs(currDepth - prevDepth) / max(currDepth, 0.0001);
+        float normalDiff = dot(currNormal, prevNormal);
+
+        if (depthDiff > 0.08 || normalDiff < 0.8) {
+            validHistory = false;
+        }
+    }
+
+    vec4 accumulated;
+    float historyLen;
+    float lum = luminance(currIllum.rgb);
+
+    if (validHistory) {
+        vec4 prevIllum = texture(prevIllumTexture, prevUv);
+        float prevHist = texture(historyLengthTexture, prevUv).r;
+
+        historyLen = min(32.0, prevHist + 1.0);
+        float alpha = max(0.05, 1.0 / historyLen);
+
+        accumulated = mix(prevIllum, currIllum, alpha);
+    } else {
+        accumulated = currIllum;
+        historyLen = 1.0;
+    }
+
+    float m1 = luminance(accumulated.rgb);
+    float m2 = m1 * m1;
+
+    imageStore(outAccumulated, pixelCoord, accumulated);
+    imageStore(outMoments, pixelCoord, vec4(m1, m2, 0.0, 0.0));
+    imageStore(outHistoryLength, pixelCoord, vec4(historyLen, 0.0, 0.0, 0.0));
+}
