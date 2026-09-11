@@ -36,7 +36,7 @@ jobs:
       - name: Set up JDK 25
         uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
+          distribution: 'temurin'
           java-version: '25'
 
       - name: Setup Gradle
@@ -46,7 +46,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build with Gradle
-        run: ./gradlew build --no-daemon
+        run: ./gradlew build --no-daemon --stacktrace
 
       - name: Verify build artifacts
         run: |
@@ -61,11 +61,11 @@ jobs:
           if-no-files-found: error
 
       - name: Check CurseForge Secrets & Variables
+        env:
+          CF_TOKEN: ${{ secrets.CURSEFORGE_TOKEN || secrets.CF_TOKEN || secrets.CURSE_TOKEN || secrets.CURSEFORGE_API_KEY }}
+          CF_ID: ${{ vars.CURSEFORGE_PROJECT_ID || secrets.CURSEFORGE_PROJECT_ID || vars.CF_PROJECT_ID || secrets.CF_PROJECT_ID || vars.PROJECT_ID || secrets.PROJECT_ID || vars.CURSE_PROJECT_ID || secrets.CURSE_PROJECT_ID || vars.CURSEFORGE_PROJEKT_ID || secrets.CURSEFORGE_PROJEKT_ID || vars.PROJEKT_ID || secrets.PROJEKT_ID }}
         run: |
           echo "=== Verifying CurseForge Configuration ==="
-          CF_TOKEN="${{ secrets.CURSEFORGE_TOKEN || secrets.CF_TOKEN || secrets.CURSE_TOKEN || secrets.CURSEFORGE_API_KEY }}"
-          CF_ID="${{ vars.CURSEFORGE_PROJECT_ID || secrets.CURSEFORGE_PROJECT_ID || vars.CF_PROJECT_ID || secrets.CF_PROJECT_ID || vars.PROJECT_ID || secrets.PROJECT_ID || vars.CURSE_PROJECT_ID || secrets.CURSE_PROJECT_ID || vars.CURSEFORGE_PROJEKT_ID || secrets.CURSEFORGE_PROJEKT_ID || vars.PROJEKT_ID || secrets.PROJEKT_ID }}"
-          
           if [ -n "$CF_TOKEN" ]; then
             echo "✔ CurseForge Token is detected."
           else
