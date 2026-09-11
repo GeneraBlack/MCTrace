@@ -5,6 +5,7 @@ import com.mojang.blaze3d.resource.GraphicsResourceAllocator;
 import net.mctrace.render.camera.CameraHistory;
 import net.mctrace.render.gbuffer.GBufferManager;
 import net.mctrace.render.jitter.JitterManager;
+import net.mctrace.vulkan.rt.TlasManager;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
@@ -48,6 +49,9 @@ public abstract class LevelRendererMixin {
 
             // 3. Apply subpixel jitter to projection matrix for FSR / TAA
             JitterManager.applyJitter(cameraRenderState.projectionMatrix);
+
+            // 4. Prepare per-frame TLAS scene instances
+            TlasManager.prepareFrame(cameraRenderState);
         }
     }
 }
