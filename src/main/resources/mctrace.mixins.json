@@ -4,6 +4,8 @@
   "package": "net.mctrace.mixin",
   "compatibilityLevel": "JAVA_21",
   "client": [
+    "GameRendererMixin",
+    "LevelRendererMixin"
   ],
   "injectors": {
     "defaultRequire": 1
