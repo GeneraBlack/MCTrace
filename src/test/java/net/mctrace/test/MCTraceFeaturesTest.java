@@ -315,6 +315,14 @@ public class MCTraceFeaturesTest {
         assertTrue(data.enableVolumetricFog);
         assertTrue(data.enableGodRays);
         assertTrue(data.enableRainWetness);
+
+        // Verify AtmosphereMode enum mappings
+        assertEquals(MCTraceConfig.AtmosphereMode.GOD_RAYS_AND_FOG, MCTraceConfig.AtmosphereMode.fromConfig(true, true));
+        assertEquals(MCTraceConfig.AtmosphereMode.GOD_RAYS_ONLY, MCTraceConfig.AtmosphereMode.fromConfig(true, false));
+        assertEquals(MCTraceConfig.AtmosphereMode.FOG_ONLY, MCTraceConfig.AtmosphereMode.fromConfig(false, true));
+        assertEquals(MCTraceConfig.AtmosphereMode.OFF, MCTraceConfig.AtmosphereMode.fromConfig(false, false));
+        assertTrue(MCTraceConfig.AtmosphereMode.GOD_RAYS_ONLY.hasGodRays());
+        assertFalse(MCTraceConfig.AtmosphereMode.GOD_RAYS_ONLY.hasFog());
     }
 
     @Test

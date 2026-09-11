@@ -104,6 +104,42 @@ public class MCTraceConfig {
         }
     }
 
+    public enum AtmosphereMode {
+        GOD_RAYS_AND_FOG("God Rays + Fog", true, true),
+        GOD_RAYS_ONLY("God Rays Only", true, false),
+        FOG_ONLY("Fog Only", false, true),
+        OFF("Off", false, false);
+
+        private final String displayName;
+        private final boolean godRays;
+        private final boolean fog;
+
+        AtmosphereMode(String displayName, boolean godRays, boolean fog) {
+            this.displayName = displayName;
+            this.godRays = godRays;
+            this.fog = fog;
+        }
+
+        public String getDisplayName() {
+            return displayName;
+        }
+
+        public boolean hasGodRays() {
+            return godRays;
+        }
+
+        public boolean hasFog() {
+            return fog;
+        }
+
+        public static AtmosphereMode fromConfig(boolean godRays, boolean fog) {
+            if (godRays && fog) return GOD_RAYS_AND_FOG;
+            if (godRays) return GOD_RAYS_ONLY;
+            if (fog) return FOG_ONLY;
+            return OFF;
+        }
+    }
+
     // Default configuration values
     public static boolean enableRayTracing = true;
     public static RayTracingMode rayTracingMode = RayTracingMode.RAY_QUERY_HYBRID;
@@ -216,9 +252,9 @@ public class MCTraceConfig {
                 enableDenoiser = true;
                 ssaoIntensity = SsaoIntensity.ENHANCED;
                 enableVolumetricFog = true;
-                volumetricFogDensity = 1.3f;
+                volumetricFogDensity = 1.0f;
                 enableGodRays = true;
-                godRaysIntensity = 1.4f;
+                godRaysIntensity = 1.2f;
                 enableRainWetness = true;
                 enableHeldDynamicLights = true;
                 enablePbrMaterials = true;

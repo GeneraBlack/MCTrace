@@ -123,12 +123,16 @@ public class MCTraceConfigScreen extends Screen {
 
         // --- Row 2: Volumetric Fog / God Rays & Rain Wetness ---
         this.addRenderableWidget(
-                CycleButton.onOffBuilder(MCTraceConfig.enableGodRays)
+                CycleButton.<MCTraceConfig.AtmosphereMode>builder(
+                                mode -> Component.literal("Atmosphere: " + mode.getDisplayName()),
+                                MCTraceConfig.AtmosphereMode.fromConfig(MCTraceConfig.enableGodRays, MCTraceConfig.enableVolumetricFog)
+                        )
+                        .withValues(MCTraceConfig.AtmosphereMode.values())
                         .create(col1X, startY + spacing * 2, buttonWidth, buttonHeight,
-                                Component.literal("Volumetric God Rays"),
+                                Component.literal("Atmosphere Mode"),
                                 (btn, val) -> {
-                                    MCTraceConfig.enableGodRays = val;
-                                    MCTraceConfig.enableVolumetricFog = val;
+                                    MCTraceConfig.enableGodRays = val.hasGodRays();
+                                    MCTraceConfig.enableVolumetricFog = val.hasFog();
                                     MCTraceConfig.currentPreset = MCTraceConfig.QualityPreset.CUSTOM;
                                 })
         );
