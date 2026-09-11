@@ -79,10 +79,10 @@ public class MCTraceGraphicsBootstrapper implements GraphicsBootstrapper {
     }
 
     private boolean isVulkanRequested(String[] arguments) {
-        // 1. Check command line arguments: --renderBackend vulkan
+        // 1. Check command line arguments: --graphicsBackend vulkan or --renderBackend vulkan
         if (arguments != null) {
             for (int i = 0; i < arguments.length; i++) {
-                if ("--renderBackend".equalsIgnoreCase(arguments[i]) && (i + 1) < arguments.length) {
+                if (("--graphicsBackend".equalsIgnoreCase(arguments[i]) || "--renderBackend".equalsIgnoreCase(arguments[i])) && (i + 1) < arguments.length) {
                     if ("vulkan".equalsIgnoreCase(arguments[i + 1])) {
                         LOGGER.info("[MCTrace Bootstrapper] Vulkan backend requested via command-line argument.");
                         return true;

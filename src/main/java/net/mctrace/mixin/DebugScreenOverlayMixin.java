@@ -19,9 +19,20 @@ public abstract class DebugScreenOverlayMixin {
         if (!isLeft) {
             lines.add("");
             lines.add("§6[MCTrace Engine]§r " + (MCTraceConfig.enableRayTracing ? "§aActive§r" : "§cDisabled§r"));
-            lines.add(" Display: " + (MCTraceConfig.isHdrActive 
-                    ? "§bTrue HDR (scRGB 16-bit Float @ " + (int) MCTraceConfig.hdrPeakLuminance + " nits)§r" 
-                    : "§eSDR (8-bit)§r"));
+
+            String backendName = "OpenGL";
+            try {
+                backendName = com.mojang.blaze3d.systems.RenderSystem.getDevice().getDeviceInfo().backendName();
+            } catch (Throwable ignored) {}
+
+            boolean isVulkan = "Vulkan".equalsIgnoreCase(backendName);
+            lines.add(" Backend: " + (isVulkan ? "§aVulkan 1.4§r" : "§e" + backendName + " (SDR only)§r"));
+
+            if (MCTraceConfig.isHdrActive) {
+                lines.add(" Display: §bTrue HDR (" + MCTraceConfig.activeFormatName + " @ " + (int) MCTraceConfig.hdrPeakLuminance + " nits)§r");
+            } else {
+                lines.add(" Display: §e" + MCTraceConfig.activeFormatName + (!isVulkan ? " §7[Switch to Vulkan for HDR]§r" : "") + "§r");
+            }
             if (MCTraceConfig.enableFSR && GBufferManager.isInitialized()) {
                 lines.add(" AMD FSR: §a" + MCTraceConfig.fsrQualityMode.name() + "§r (" +
                         GBufferManager.getRenderWidth() + "x" + GBufferManager.getRenderHeight() + " -> " +

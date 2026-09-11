@@ -162,6 +162,24 @@ public class MCTraceConfigScreen extends Screen {
                 }).bounds(col2X, startY + spacing * 4, buttonWidth, buttonHeight).build()
         );
 
+        // 11. Graphics Backend Selector (Vulkan / OpenGL / Default)
+        if (this.minecraft != null && this.minecraft.options != null) {
+            net.minecraft.client.PreferredGraphicsApi currentApi = this.minecraft.options.preferredGraphicsBackend().get();
+            this.addRenderableWidget(
+                    CycleButton.<net.minecraft.client.PreferredGraphicsApi>builder(
+                                    api -> Component.literal("Graphics API: " + (api == net.minecraft.client.PreferredGraphicsApi.VULKAN ? "§aVulkan (True HDR)§r" : api.caption().getString())),
+                                    currentApi
+                            )
+                            .withValues(net.minecraft.client.PreferredGraphicsApi.values())
+                            .create(centerX - 110, startY + spacing * 5, 220, 20,
+                                    Component.literal("Graphics API"),
+                                    (btn, val) -> {
+                                        this.minecraft.options.preferredGraphicsBackend().set(val);
+                                        this.minecraft.options.save();
+                                    })
+            );
+        }
+
         // --- Bottom: Done Button ---
         this.addRenderableWidget(
                 Button.builder(CommonComponents.GUI_DONE, btn -> {
@@ -169,14 +187,19 @@ public class MCTraceConfigScreen extends Screen {
                     if (this.minecraft != null) {
                         this.minecraft.gui.setScreen(this.lastScreen);
                     }
-                }).bounds(centerX - 100, Math.min(this.height - 32, startY + spacing * 5 + 16), 200, 20).build()
+                }).bounds(centerX - 100, Math.min(this.height - 26, startY + spacing * 5 + 38), 200, 20).build()
         );
     }
 
     @Override
     public void extractRenderState(GuiGraphicsExtractor extractor, int mouseX, int mouseY, float partialTick) {
         super.extractRenderState(extractor, mouseX, mouseY, partialTick);
-        extractor.centeredText(this.font, this.title, this.width / 2, 16, 0xFFFFFF);
+        int centerX = this.width / 2;
+        int startY = Math.max(40, this.height / 6);
+        int spacing = 24;
+
+        extractor.centeredText(this.font, this.title, centerX, 16, 0xFFFFFF);
+        extractor.centeredText(this.font, Component.literal("§7* Set Graphics API to Vulkan for Hardware RT & True 10-bit HDR (requires restart)§r"), centerX, startY + spacing * 5 + 23, 0xAAAAAA);
     }
 
     @Override

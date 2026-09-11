@@ -46,12 +46,15 @@ public abstract class VulkanGpuSurfaceMixin {
 
         VkSurfaceFormatKHR chosenFormat = null;
 
+        String formatName = null;
+
         // Choice 1: scRGB 16-bit float linear (VK_FORMAT_R16G16B16A16_SFLOAT + VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT)
         for (int i = 0; i < formats.capacity(); i++) {
             VkSurfaceFormatKHR format = formats.get(i);
             if (format.colorSpace() == EXTSwapchainColorspace.VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT
                     && format.format() == VK10.VK_FORMAT_R16G16B16A16_SFLOAT) {
                 chosenFormat = format;
+                formatName = "scRGB 16-bit Float";
                 MCTrace.LOGGER.info("[MCTrace HDR] Selected scRGB 16-bit Float True HDR format (R16G16B16A16_SFLOAT, EXT_SRGB_LINEAR).");
                 break;
             }
@@ -64,6 +67,7 @@ public abstract class VulkanGpuSurfaceMixin {
                 if (format.colorSpace() == EXTSwapchainColorspace.VK_COLOR_SPACE_HDR10_ST2084_EXT
                         && format.format() == VK10.VK_FORMAT_A2B10G10R10_UNORM_PACK32) {
                     chosenFormat = format;
+                    formatName = "HDR10 10-bit";
                     MCTrace.LOGGER.info("[MCTrace HDR] Selected HDR10 10-bit ST.2084 True HDR format (A2B10G10R10_UNORM_PACK32, HDR10_ST2084).");
                     break;
                 }
@@ -74,11 +78,13 @@ public abstract class VulkanGpuSurfaceMixin {
             currentHdrFormat = chosenFormat.format();
             currentHdrColorSpace = chosenFormat.colorSpace();
             MCTraceConfig.isHdrActive = true;
+            MCTraceConfig.activeFormatName = formatName != null ? formatName : "True HDR";
             cir.setReturnValue(chosenFormat);
         } else {
             currentHdrFormat = 0;
             currentHdrColorSpace = 0;
             MCTraceConfig.isHdrActive = false;
+            MCTraceConfig.activeFormatName = "SDR (8-bit)";
             MCTrace.LOGGER.info("[MCTrace HDR] Monitor/OS does not report HDR swapchain surface format, falling back to SDR.");
         }
     }

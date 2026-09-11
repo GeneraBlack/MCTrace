@@ -108,6 +108,7 @@ public class MCTraceConfig {
     public static float hdrMiddleGrayContrast = 1.0f; // Midtone contrast slope (0.8 - 1.5)
     public static boolean hdrCalibrated = false;    // Has the user completed display calibration
     public static boolean isHdrActive = false;     // True when swapchain is running in HDR mode
+    public static String activeFormatName = "SDR (8-bit)"; // Detected swapchain surface format name
 
     // Advanced Quality & Shading Parameters
     public static SsaoIntensity ssaoIntensity = SsaoIntensity.STANDARD;
