@@ -111,8 +111,32 @@ public abstract class GameRendererMixin {
         }
     }
 
-    private static final java.nio.ByteBuffer uboBuffer = java.nio.ByteBuffer.allocateDirect(64).order(java.nio.ByteOrder.nativeOrder());
+    private static final java.nio.ByteBuffer uboBuffer = java.nio.ByteBuffer.allocateDirect(112).order(java.nio.ByteOrder.nativeOrder());
     private static boolean loggedUniformsOk = false;
+
+    private static float[] mctrace$resolveItemLight(net.minecraft.world.item.ItemStack stack) {
+        if (stack == null || stack.isEmpty()) return null;
+        String desc = stack.getItem().toString().toLowerCase();
+        if (desc.contains("torch") && desc.contains("soul")) {
+            return new float[]{ 0.12f, 0.88f, 0.95f, 1.0f }; // Soul Torch / Lantern (Teal)
+        }
+        if (desc.contains("torch") || desc.contains("lantern") || desc.contains("campfire") || desc.contains("lava")) {
+            return new float[]{ 1.00f, 0.65f, 0.22f, 1.0f }; // Torch / Lantern / Lava (Amber)
+        }
+        if (desc.contains("redstone")) {
+            return new float[]{ 1.00f, 0.15f, 0.05f, 0.9f }; // Redstone (Crimson)
+        }
+        if (desc.contains("glowstone") || desc.contains("shroomlight")) {
+            return new float[]{ 1.00f, 0.80f, 0.30f, 1.0f }; // Glowstone (Gold)
+        }
+        if (desc.contains("amethyst")) {
+            return new float[]{ 0.75f, 0.35f, 1.00f, 0.8f }; // Amethyst (Violet)
+        }
+        if (desc.contains("sculk")) {
+            return new float[]{ 0.08f, 0.94f, 0.88f, 1.0f }; // Sculk (Cyan)
+        }
+        return null;
+    }
 
     private void mctrace$updateCompositeUniforms(PostChain chain) {
         try {
@@ -124,27 +148,79 @@ public abstract class GameRendererMixin {
                     com.mojang.blaze3d.buffers.GpuBuffer buffer = uniforms.get("MCTraceParams");
                     if (buffer != null) {
                         uboBuffer.clear();
-                        // vec4 HdrConfig: sceneBrightness, paperWhite, peakLum, contrast
+
+                        // 1. vec4 HdrConfig: sceneBrightness, paperWhite, peakLum, contrast
                         uboBuffer.putFloat(MCTraceConfig.sceneBrightness);
                         uboBuffer.putFloat(MCTraceConfig.hdrPaperWhite);
                         uboBuffer.putFloat(MCTraceConfig.hdrPeakLuminance);
                         uboBuffer.putFloat(MCTraceConfig.hdrMiddleGrayContrast);
-                        // vec4 LightingConfig: isHdrActive, ssaoMultiplier, minLum, wideGamutStrength
+
+                        // 2. vec4 LightingConfig: isHdrActive, ssaoMultiplier, minLum, wideGamutStrength
                         uboBuffer.putFloat(MCTraceConfig.isHdrActive ? 1.0f : 0.0f);
                         uboBuffer.putFloat(MCTraceConfig.ssaoIntensity.getMultiplier());
                         uboBuffer.putFloat(MCTraceConfig.hdrMinLuminance);
                         uboBuffer.putFloat(MCTraceConfig.enableWideGamut ? MCTraceConfig.wideGamutStrength : 0.0f);
-                        // vec4 MaterialConfig: enablePbr, enableWaterReflections, enableDynamicColoredLight, time
+
+                        // 3. vec4 MaterialConfig: enablePbr, enableWaterReflections, enableDynamicColoredLight, time
                         uboBuffer.putFloat(MCTraceConfig.enablePbrMaterials ? 1.0f : 0.0f);
                         uboBuffer.putFloat(MCTraceConfig.enableWaterReflections ? 1.0f : 0.0f);
                         uboBuffer.putFloat(MCTraceConfig.enableDynamicColoredLight ? 1.0f : 0.0f);
                         float time = (float) ((System.currentTimeMillis() % 1000000L) / 1000.0);
                         uboBuffer.putFloat(time);
-                        // vec4 ExtraConfig
-                        uboBuffer.putFloat(0.0f);
-                        uboBuffer.putFloat(0.0f);
-                        uboBuffer.putFloat(0.0f);
-                        uboBuffer.putFloat(0.0f);
+
+                        // 4. vec4 WeatherConfig: rainLevel, wetness, thunderLevel, skyAngle
+                        float rainLevel = 0.0f;
+                        float thunderLevel = 0.0f;
+                        float skyAngle = 0.0f;
+                        if (this.minecraft != null && this.minecraft.level != null) {
+                            rainLevel = this.minecraft.level.getRainLevel(1.0f);
+                            thunderLevel = this.minecraft.level.getThunderLevel(1.0f);
+                            skyAngle = (float) ((this.minecraft.level.getGameTime() % 24000L) / 24000.0);
+                        }
+                        float wetness = MCTraceConfig.enableRainWetness ? rainLevel : 0.0f;
+                        uboBuffer.putFloat(rainLevel);
+                        uboBuffer.putFloat(wetness);
+                        uboBuffer.putFloat(thunderLevel);
+                        uboBuffer.putFloat(skyAngle);
+
+                        // 5. vec4 AtmosphereConfig: enableFog, fogDensity, enableGodRays, godRaysIntensity
+                        uboBuffer.putFloat(MCTraceConfig.enableVolumetricFog ? 1.0f : 0.0f);
+                        uboBuffer.putFloat(MCTraceConfig.volumetricFogDensity);
+                        uboBuffer.putFloat(MCTraceConfig.enableGodRays ? 1.0f : 0.0f);
+                        uboBuffer.putFloat(MCTraceConfig.godRaysIntensity);
+
+                        // 6. vec4 DynamicLightConfig: heldLightR, heldLightG, heldLightB, heldLightIntensity
+                        float heldR = 0.0f, heldG = 0.0f, heldB = 0.0f, heldIntensity = 0.0f;
+                        if (MCTraceConfig.enableHeldDynamicLights && this.minecraft != null && this.minecraft.player != null) {
+                            float[] light = mctrace$resolveItemLight(this.minecraft.player.getMainHandItem());
+                            if (light == null) {
+                                light = mctrace$resolveItemLight(this.minecraft.player.getOffhandItem());
+                            }
+                            if (light != null) {
+                                heldR = light[0];
+                                heldG = light[1];
+                                heldB = light[2];
+                                heldIntensity = light[3];
+                            }
+                        }
+                        uboBuffer.putFloat(heldR);
+                        uboBuffer.putFloat(heldG);
+                        uboBuffer.putFloat(heldB);
+                        uboBuffer.putFloat(heldIntensity);
+
+                        // 7. vec4 CinematicConfig: enableMotionBlur, motionBlurStrength, enableDof, pomDepth
+                        float enableDof = MCTraceConfig.enableBokehDof ? 1.0f : 0.0f;
+                        if (this.minecraft != null && this.minecraft.player != null) {
+                            if (this.minecraft.player.isScoping() || (this.minecraft.player.isUsingItem() && this.minecraft.player.getUseItem().getItem() instanceof net.minecraft.world.item.BowItem)) {
+                                enableDof = 1.0f;
+                            }
+                        }
+                        float pomDepth = MCTraceConfig.enableParallaxOcclusion ? MCTraceConfig.pomDepth : 0.0f;
+                        uboBuffer.putFloat(MCTraceConfig.enableMotionBlur ? 1.0f : 0.0f);
+                        uboBuffer.putFloat(MCTraceConfig.motionBlurStrength);
+                        uboBuffer.putFloat(enableDof);
+                        uboBuffer.putFloat(pomDepth);
+
                         uboBuffer.flip();
 
                         com.mojang.blaze3d.systems.RenderSystem.getDevice().createCommandEncoder().writeToBuffer(buffer.slice(), uboBuffer);

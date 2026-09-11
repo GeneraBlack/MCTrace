@@ -109,6 +109,9 @@ public class TlasManager {
             }
         }
 
+        // 2b. Gather dynamic entity BLAS instances (players, mobs, vehicles)
+        frameInstances.addAll(EntityBlasManager.buildEntityInstances());
+
         activeInstanceCount = frameInstances.size();
 
         // 3. Construct the Top-Level Acceleration Structure handle and address

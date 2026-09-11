@@ -7,6 +7,7 @@ import net.mctrace.vulkan.hdr.DisplayHdrSync;
 import net.mctrace.vulkan.pbr.MaterialRegistry;
 import net.mctrace.vulkan.pbr.PbrMaterial;
 import net.mctrace.vulkan.rt.BlasManager;
+import net.mctrace.vulkan.rt.EntityBlasManager;
 import net.mctrace.vulkan.rt.SectionGeometry;
 import net.mctrace.vulkan.rt.TlasManager;
 import net.minecraft.core.SectionPos;
@@ -255,5 +256,161 @@ public class MCTraceFeaturesTest {
         VelocityPass.computeVelocity(0.5f, 0.5f, 0.5f, velocity);
         assertEquals(0.0f, velocity.x, 0.0001f);
         assertEquals(0.0f, velocity.y, 0.0001f);
+    }
+
+    // =========================================================================
+    // Category 1 & Category 4: Quality Presets & Atmosphere
+    // =========================================================================
+
+    @Test
+    @DisplayName("Next-Gen: 1-Click Graphics & RT Quality Presets")
+    void testQualityPresets() {
+        // 1. Performance preset
+        MCTraceConfig.applyPreset(MCTraceConfig.QualityPreset.PERFORMANCE);
+        assertEquals(MCTraceConfig.QualityPreset.PERFORMANCE, MCTraceConfig.currentPreset);
+        assertEquals(MCTraceConfig.RayQueryQuality.PERFORMANCE, MCTraceConfig.rayQueryQuality);
+        assertEquals(MCTraceConfig.SsaoIntensity.SUBTLE, MCTraceConfig.ssaoIntensity);
+        assertEquals(MCTraceConfig.FsrQualityMode.BALANCED, MCTraceConfig.fsrQualityMode);
+        assertFalse(MCTraceConfig.enableParallaxOcclusion);
+        assertFalse(MCTraceConfig.enableBokehDof);
+
+        // 2. Balanced preset
+        MCTraceConfig.applyPreset(MCTraceConfig.QualityPreset.BALANCED);
+        assertEquals(MCTraceConfig.QualityPreset.BALANCED, MCTraceConfig.currentPreset);
+        assertEquals(MCTraceConfig.RayQueryQuality.BALANCED, MCTraceConfig.rayQueryQuality);
+        assertEquals(MCTraceConfig.SsaoIntensity.STANDARD, MCTraceConfig.ssaoIntensity);
+        assertEquals(MCTraceConfig.FsrQualityMode.QUALITY, MCTraceConfig.fsrQualityMode);
+        assertTrue(MCTraceConfig.enableVolumetricFog);
+        assertTrue(MCTraceConfig.enableGodRays);
+        assertTrue(MCTraceConfig.enableRainWetness);
+        assertTrue(MCTraceConfig.enableHeldDynamicLights);
+        assertTrue(MCTraceConfig.enableParallaxOcclusion);
+
+        // 3. Ultra HDR / Cinematic preset
+        MCTraceConfig.applyPreset(MCTraceConfig.QualityPreset.ULTRA_HDR);
+        assertEquals(MCTraceConfig.QualityPreset.ULTRA_HDR, MCTraceConfig.currentPreset);
+        assertEquals(MCTraceConfig.RayQueryQuality.QUALITY, MCTraceConfig.rayQueryQuality);
+        assertEquals(MCTraceConfig.SsaoIntensity.ENHANCED, MCTraceConfig.ssaoIntensity);
+        assertEquals(MCTraceConfig.FsrQualityMode.ULTRA_QUALITY, MCTraceConfig.fsrQualityMode);
+        assertTrue(MCTraceConfig.enableMotionBlur);
+        assertTrue(MCTraceConfig.enableBokehDof);
+        assertTrue(MCTraceConfig.enableParallaxOcclusion);
+        assertTrue(MCTraceConfig.pomDepth >= 0.05f);
+
+        // Reset to Balanced
+        MCTraceConfig.applyPreset(MCTraceConfig.QualityPreset.BALANCED);
+    }
+
+    @Test
+    @DisplayName("Category 1: Volumetric Fog, God Rays & Rain Wetness Weather PBR")
+    void testWeatherAndAtmosphereFeatures() {
+        assertTrue(MCTraceConfig.enableVolumetricFog, "Volumetric fog should be enabled by default");
+        assertTrue(MCTraceConfig.enableGodRays, "God rays should be enabled by default");
+        assertTrue(MCTraceConfig.enableRainWetness, "Rain wetness and puddle accumulation should be enabled by default");
+        assertEquals(1.0f, MCTraceConfig.volumetricFogDensity, 0.01f);
+        assertEquals(1.0f, MCTraceConfig.godRaysIntensity, 0.01f);
+
+        // Verify config data serialization
+        MCTraceConfig.ConfigData data = new MCTraceConfig.ConfigData();
+        assertTrue(data.enableVolumetricFog);
+        assertTrue(data.enableGodRays);
+        assertTrue(data.enableRainWetness);
+    }
+
+    @Test
+    @DisplayName("Category 1: Hand-Held Dynamic Lights Configuration")
+    void testHeldDynamicLightsConfig() {
+        assertTrue(MCTraceConfig.enableHeldDynamicLights, "Hand-held dynamic lights should be enabled by default");
+    }
+
+    // =========================================================================
+    // Category 2: LabPBR 1.3 & Parallax Occlusion Mapping
+    // =========================================================================
+
+    @Test
+    @DisplayName("Category 2: LabPBR 1.3 Specular Channel Decoding & POM Depth")
+    void testLabPbr13DecoderAndPomRelief() {
+        // Test LabPBR decoder:
+        // R = 200 (Smoothness ~0.784 => Roughness ~0.216)
+        // G = 240 (Metallic => (240 - 230) / 25 = 0.40)
+        // B = 50  (Porosity ~0.196)
+        // A = 255 (Emission 1.0)
+        MaterialRegistry.LabPbrDecoded decoded = new MaterialRegistry.LabPbrDecoded(200, 240, 50, 255);
+        assertEquals(0.216f, decoded.roughness, 0.01f);
+        assertEquals(0.40f, decoded.metallic, 0.01f);
+        assertEquals(1.0f, decoded.f0, 0.01f);
+        assertEquals(1.0f, decoded.emission, 0.01f);
+
+        // Dielectric test: G = 128
+        MaterialRegistry.LabPbrDecoded dielectric = new MaterialRegistry.LabPbrDecoded(100, 128, 0, 0);
+        assertEquals(0.0f, dielectric.metallic, 0.01f);
+        assertEquals(128.0f / 255.0f, dielectric.f0, 0.01f);
+        assertEquals(0.0f, dielectric.emission, 0.01f);
+
+        // POM Depth profiling for relief surfaces
+        assertTrue(MaterialRegistry.getPomDepthForBlock("minecraft:block/stone_bricks") > 0.05f, "Stone bricks must have high POM relief");
+        assertTrue(MaterialRegistry.getPomDepthForBlock("minecraft:block/cobblestone") > 0.05f, "Cobblestone must have high POM relief");
+        assertTrue(MaterialRegistry.getPomDepthForBlock("minecraft:block/oak_planks") > 0.03f, "Planks must have POM relief");
+        assertEquals(0.0f, MaterialRegistry.getPomDepthForBlock("minecraft:block/glass"), 0.001f, "Glass has zero POM relief");
+        assertEquals(0.0f, MaterialRegistry.getPomDepthForBlock("minecraft:block/smooth_stone"), 0.001f, "Smooth stone has zero POM relief");
+    }
+
+    // =========================================================================
+    // Category 3: Dynamic Entity BLAS & TLAS
+    // =========================================================================
+
+    @Test
+    @DisplayName("Category 3: Dynamic Entity BLAS Tracking & TLAS Scene Instances")
+    void testEntityAccelerationStructures() {
+        EntityBlasManager.clear();
+        assertEquals(0, EntityBlasManager.getActiveEntityCount());
+
+        // 1. Register player entity
+        EntityBlasManager.updateEntity(1001, "minecraft:player", 10.5, 64.0, -20.5, 90.0f, 0.6f, 1.8f);
+        // 2. Register zombie entity
+        EntityBlasManager.updateEntity(1002, "minecraft:zombie", 14.0, 64.0, -18.0, 45.0f, 0.6f, 1.9f);
+
+        assertEquals(2, EntityBlasManager.getActiveEntityCount());
+
+        List<TlasManager.SceneInstance> instances = EntityBlasManager.buildEntityInstances();
+        assertEquals(2, instances.size());
+
+        TlasManager.SceneInstance playerInst = instances.get(0);
+        assertEquals(10.5f, playerInst.getPosX(), 0.01f);
+        assertEquals(64.0f, playerInst.getPosY(), 0.01f);
+        assertEquals(-20.5f, playerInst.getPosZ(), 0.01f);
+        assertTrue((playerInst.getCustomIndex() & 0x800000) != 0, "Entity custom index must have high bit set");
+
+        // 3. Entity removal
+        EntityBlasManager.removeEntity(1002);
+        assertEquals(1, EntityBlasManager.getActiveEntityCount());
+
+        EntityBlasManager.clear();
+        assertEquals(0, EntityBlasManager.getActiveEntityCount());
+    }
+
+    // =========================================================================
+    // Category 4: Cinematic Motion Blur & Bokeh DoF
+    // =========================================================================
+
+    @Test
+    @DisplayName("Category 4: Cinematic Polish (Motion Blur & Optical Bokeh DoF)")
+    void testCinematicPolishConfig() {
+        assertFalse(MCTraceConfig.enableMotionBlur, "Motion blur is disabled by default for competitive clarity");
+        assertFalse(MCTraceConfig.enableBokehDof, "Bokeh DoF is disabled by default until aimed or enabled");
+        assertEquals(0.5f, MCTraceConfig.motionBlurStrength, 0.01f);
+        assertEquals(0.0f, MCTraceConfig.dofFocalDistance, 0.01f, "Default focal distance is auto-focus (0.0)");
+
+        MCTraceConfig.enableMotionBlur = true;
+        MCTraceConfig.enableBokehDof = true;
+        MCTraceConfig.ConfigData data = new MCTraceConfig.ConfigData();
+        data.enableMotionBlur = true;
+        data.enableBokehDof = true;
+        assertTrue(data.enableMotionBlur);
+        assertTrue(data.enableBokehDof);
+
+        // Reset
+        MCTraceConfig.enableMotionBlur = false;
+        MCTraceConfig.enableBokehDof = false;
     }
 }

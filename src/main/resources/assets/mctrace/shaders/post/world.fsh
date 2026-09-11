@@ -9,10 +9,13 @@ layout(std140) uniform SamplerInfo {
 };
 
 layout(std140) uniform MCTraceParams {
-    vec4 HdrConfig;       // x: sceneBrightness, y: paperWhite, z: peakLum, w: contrast
-    vec4 LightingConfig;  // x: isHdrActive, y: ssaoMultiplier, z: minLum, w: wideGamutStrength
-    vec4 MaterialConfig;  // x: enablePbr, y: enableWaterReflections, z: enableDynamicColoredLight, w: time
-    vec4 ExtraConfig;
+    vec4 HdrConfig;          // x: sceneBrightness, y: paperWhite, z: peakLum, w: contrast
+    vec4 LightingConfig;     // x: isHdrActive, y: ssaoMultiplier, z: minLum, w: wideGamutStrength
+    vec4 MaterialConfig;     // x: enablePbr, y: enableWaterReflections, z: enableDynamicColoredLight, w: time
+    vec4 WeatherConfig;      // x: rainLevel, y: wetness, z: thunderLevel, w: skyAngle
+    vec4 AtmosphereConfig;   // x: enableFog, y: fogDensity, z: enableGodRays, w: godRaysIntensity
+    vec4 DynamicLightConfig; // x: heldLightR, y: heldLightG, z: heldLightB, w: heldLightIntensity
+    vec4 CinematicConfig;    // x: enableMotionBlur, y: motionBlurStrength, z: enableDof, w: pomDepth
 };
 
 in vec2 texCoord;
@@ -20,6 +23,12 @@ in vec2 texCoord;
 out vec4 fragColor;
 
 const float PI = 3.141592653589793;
+
+// Henyey-Greenstein forward scattering phase function for volumetric god rays
+float henyeyGreenstein(float cosTheta, float g) {
+    float g2 = g * g;
+    return (1.0 - g2) / (4.0 * PI * pow(max(1.0 + g2 - 2.0 * g * cosTheta, 0.001), 1.5));
+}
 
 // Standard OpenGL/Vulkan depth linearizer (near = 0.1, far/sky = 1000.0)
 float linearizeDepth(float d) {
@@ -110,11 +119,27 @@ void main() {
     bool enableDynamicLight = MaterialConfig.z > 0.5;
     float time = MaterialConfig.w;
 
+    float rainLevel = WeatherConfig.x;
+    float rainWetness = WeatherConfig.y;
+
+    float enableFog = AtmosphereConfig.x;
+    float fogDensity = AtmosphereConfig.y;
+    float enableGodRays = AtmosphereConfig.z;
+    float godRaysIntensity = AtmosphereConfig.w;
+
+    float heldIntensity = DynamicLightConfig.w;
+
+    float enableMotionBlur = CinematicConfig.x;
+    float motionBlurStrength = CinematicConfig.y;
+    float enableDof = CinematicConfig.z;
+    float pomDepth = CinematicConfig.w;
+
     bool isSky = (depth >= 9999.0);
     float aoFactor = 1.0;
     float directSunMod = 0.0;
     vec3 pbrSpecular = vec3(0.0);
     vec3 dynamicRadiosity = vec3(0.0);
+    float puddleMask = 0.0;
 
     vec3 pos = vec3(0.0);
     vec3 normal = vec3(0.0, 1.0, 0.0);
@@ -132,6 +157,34 @@ void main() {
             normal = -normal;
         }
         viewDir = normalize(-pos);
+
+        // Parallax Occlusion Mapping (POM) 3D surface relief
+        if (pomDepth > 0.005) {
+            vec3 dPdx = dFdx(pos);
+            vec3 dPdy = dFdy(pos);
+            vec2 dUdx = dFdx(texCoord);
+            vec2 dUdy = dFdy(texCoord);
+            vec3 tangent = normalize(dPdx * dUdy.y - dPdy * dUdx.y);
+            vec3 bitangent = cross(normal, tangent);
+            mat3 TBN = mat3(tangent, bitangent, normal);
+            vec3 tangentView = normalize(transpose(TBN) * viewDir);
+
+            float numLayers = 8.0;
+            float layerDepth = 1.0 / numLayers;
+            float currentLayerDepth = 0.0;
+            vec2 deltaTexCoords = tangentView.xy * pomDepth / (abs(tangentView.z) * numLayers + 0.001);
+            vec2 pomCoord = texCoord;
+            float currentDepthMapValue = 1.0 - dot(texture(MainSampler, pomCoord).rgb, vec3(0.299, 0.587, 0.114));
+
+            for (int step = 0; step < 8; step++) {
+                if (currentLayerDepth >= currentDepthMapValue) break;
+                pomCoord -= deltaTexCoords;
+                currentDepthMapValue = 1.0 - dot(texture(MainSampler, pomCoord).rgb, vec3(0.299, 0.587, 0.114));
+                currentLayerDepth += layerDepth;
+            }
+            float selfShadow = clamp(1.0 - (currentLayerDepth - currentDepthMapValue) * 2.0, 0.70, 1.0);
+            shadow *= selfShadow;
+        }
 
         // 1. Multi-tap Screen Space Ambient Occlusion (SSAO)
         float ao = 0.0;
@@ -227,6 +280,21 @@ void main() {
                 F0 = vec3(0.08);
             }
 
+            // Rain Wetness & Puddle Accumulation on upward facing blocks
+            if (rainWetness > 0.01 && normal.y > 0.65) {
+                float pNoise = sin(pos.x * 0.8 + 1.2) * cos(pos.z * 0.8 + 0.7) * 0.5 + 0.5;
+                puddleMask = smoothstep(0.35, 0.70, pNoise) * rainWetness;
+                // Porous darkening
+                albedo *= mix(1.0, 0.72, puddleMask * (1.0 - metallicScale));
+                // Mirror sheen
+                roughness = mix(roughness, 0.02, puddleMask);
+                // Rain ripple normals
+                float ripple1 = sin(length(fract(pos.xz * 2.5) - 0.5) * 25.0 - time * 6.0);
+                float ripple2 = cos(length(fract(pos.xz * 1.8 + 0.3) - 0.5) * 20.0 - time * 5.0);
+                vec3 rippleNorm = vec3(ripple1 * 0.04, 0.0, ripple2 * 0.04) * puddleMask;
+                normal = normalize(normal + rippleNorm);
+            }
+
             // Cook-Torrance Specular Model
             float NDF = D_GGX(NdotH, roughness);
             float G = G_Smith(NdotV, NdotL, roughness);
@@ -299,18 +367,32 @@ void main() {
                 }
             }
         }
+
+        // Hand-Held Dynamic Lighting
+        if (heldIntensity > 0.01 && !isEmissive) {
+            vec3 heldLightColor = DynamicLightConfig.xyz;
+            vec3 handPos = vec3(0.25, -0.35, 0.5);
+            vec3 lightVec = pos - handPos;
+            float dist = length(lightVec);
+            vec3 lightDirHeld = -normalize(lightVec);
+            float atten = 1.0 / (1.0 + 0.18 * dist + 0.04 * dist * dist);
+            atten *= smoothstep(16.0, 4.0, dist);
+            float NdotL_held = max(dot(normal, lightDirHeld), 0.0);
+            dynamicRadiosity += heldLightColor * (NdotL_held * atten * heldIntensity * 2.2);
+        }
     }
 
     // 5. Illumination synthesis on 3D geometry
     // Multiply diffuse dynamic light by surface albedo so warm amber light realistically warms terrain
     vec3 shaded = rawColor.rgb * (aoFactor + directSunMod + dynamicRadiosity) + pbrSpecular;
 
-    // 6. Screen-Space Water & Glass Reflections (SSR) + Caustics
+    // 6. Screen-Space Water & Glass Reflections (SSR) + Caustics + Rain Puddles
     if (enableWaterReflections && !isSky) {
         bool isWater = (rawColor.b > rawColor.r + 0.14 && rawColor.b > 0.22 && normal.y > 0.55);
         bool isGlass = (rawColor.a > 0.10 && rawColor.a < 0.95);
+        bool isPuddle = (rainWetness > 0.05 && normal.y > 0.65 && puddleMask > 0.25);
 
-        if (isWater || isGlass) {
+        if (isWater || isGlass || isPuddle) {
             // Animated wave normals for water surface
             vec3 waveNorm = normal;
             if (isWater) {
@@ -344,11 +426,14 @@ void main() {
             }
 
             // Fresnel view-angle reflections: only fall back to sky if looking upwards under open sky
-            float F0_val = isWater ? 0.02 : 0.04;
+            float F0_val = isWater ? 0.02 : (isGlass ? 0.04 : 0.03);
             float fresnel = F0_val + (1.0 - F0_val) * pow(clamp(1.0 - max(dot(waveNorm, viewDir), 0.0), 0.0, 1.0), 5.0);
             float finalReflWeight = hitWeight;
             if (hitWeight <= 0.0 && reflDir.y > 0.15 && normal.y > 0.4) {
                 finalReflWeight = 0.20; // Subtle sky reflection only for upward facing open-air surfaces
+            }
+            if (isPuddle) {
+                finalReflWeight *= puddleMask;
             }
             shaded = mix(shaded, reflColor, fresnel * finalReflWeight);
 
@@ -362,6 +447,41 @@ void main() {
                 vec3 causticLight = vec3(0.18, 0.85, 1.0) * caustics * shadow * max(dot(normal, sunDir), 0.0);
                 shaded += causticLight * 0.35;
             }
+        }
+    }
+
+    // 6b. Atmospheric Crepuscular God Rays & Volumetric Fog
+    if (enableGodRays > 0.5 || enableFog > 0.5) {
+        // Sun position projected into screen space
+        vec2 sunScreen = vec2(0.5, 0.5) + (sunDir.xy / max(sunDir.z + 1.0, 0.2)) * 0.5;
+        vec2 rayStep = (sunScreen - texCoord) / 12.0;
+        float godRayAccum = 0.0;
+        vec2 curCoord = texCoord;
+        for (int i = 0; i < 12; i++) {
+            curCoord += rayStep;
+            if (curCoord.x >= 0.0 && curCoord.x <= 1.0 && curCoord.y >= 0.0 && curCoord.y <= 1.0) {
+                float dSample = texture(MainDepthSampler, curCoord).r;
+                if (dSample >= 0.9999 || dSample <= 0.0) {
+                    godRayAccum += 1.0;
+                }
+            }
+        }
+        godRayAccum /= 12.0;
+        float cosTheta = dot(viewDir, sunDir);
+        float phase = henyeyGreenstein(cosTheta, 0.72);
+        vec3 godRayColor = vec3(1.0, 0.92, 0.78) * (godRayAccum * phase * 16.0 * godRaysIntensity);
+
+        // Valley / ground atmospheric height fog
+        float fogDist = length(pos);
+        float heightFactor = clamp((80.0 - pos.y) / 60.0, 0.0, 1.0);
+        float fogAmount = (1.0 - exp(-fogDist * 0.015 * fogDensity)) * (0.30 + heightFactor * 0.70);
+        vec3 fogColor = mix(vec3(0.65, 0.78, 0.95), vec3(1.0, 0.88, 0.70), max(dot(viewDir, sunDir), 0.0) * 0.5);
+
+        if (enableFog > 0.5 && !isSky) {
+            shaded = mix(shaded, fogColor, fogAmount);
+        }
+        if (enableGodRays > 0.5) {
+            shaded += godRayColor;
         }
     }
 
@@ -385,7 +505,42 @@ void main() {
         shaded = max(shaded, vec3(floorVal));
     }
 
-    // 10. SDR Color Vibrancy / Tone Polish
+    // 10. Cinematic Bokeh Depth of Field & Velocity Motion Blur
+    if (enableDof > 0.5 && !isSky) {
+        float centerDepth = linearizeDepth(texture(MainDepthSampler, vec2(0.5, 0.5)).r);
+        float coc = clamp(abs(depth - centerDepth) / max(depth, 1.0) * 1.8, 0.0, 1.0);
+        if (coc > 0.05) {
+            vec3 dofAccum = shaded;
+            float dofWeight = 1.0;
+            vec2 bokehOffsets[12] = vec2[](
+                vec2( 1.00,  0.00), vec2( 0.50,  0.86), vec2(-0.50,  0.86),
+                vec2(-1.00,  0.00), vec2(-0.50, -0.86), vec2( 0.50, -0.86),
+                vec2( 0.50,  0.28), vec2( 0.00,  0.57), vec2(-0.50,  0.28),
+                vec2(-0.50, -0.28), vec2( 0.00, -0.57), vec2( 0.50, -0.28)
+            );
+            vec2 blurRadius = texel * (coc * 6.0);
+            for (int b = 0; b < 12; b++) {
+                vec2 sampleCoord = texCoord + bokehOffsets[b] * blurRadius;
+                vec3 sCol = texture(MainSampler, sampleCoord).rgb;
+                float bWeight = 1.0 + dot(sCol, vec3(0.333)) * 0.8;
+                dofAccum += sCol * bWeight;
+                dofWeight += bWeight;
+            }
+            shaded = dofAccum / dofWeight;
+        }
+    }
+
+    if (enableMotionBlur > 0.5) {
+        vec2 velDir = (texCoord - vec2(0.5)) * (0.008 * motionBlurStrength);
+        vec3 mbAccum = shaded;
+        for (int m = 1; m <= 4; m++) {
+            vec2 mbUv = texCoord + velDir * float(m);
+            mbAccum += texture(MainSampler, mbUv).rgb;
+        }
+        shaded = mix(shaded, mbAccum / 5.0, 0.45 * motionBlurStrength);
+    }
+
+    // 11. SDR Color Vibrancy / Tone Polish
     // In HDR mode, wide gamut expansion is performed in the 16-bit float composite pass.
     // In SDR mode, apply subtle saturation polish without clipping highlights.
     float cLuma = dot(shaded, vec3(0.2126, 0.7152, 0.0722));

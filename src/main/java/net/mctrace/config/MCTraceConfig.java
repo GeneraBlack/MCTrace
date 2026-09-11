@@ -59,6 +59,23 @@ public class MCTraceConfig {
         }
     }
 
+    public enum QualityPreset {
+        CUSTOM("Custom"),
+        PERFORMANCE("Performance"),
+        BALANCED("Balanced"),
+        ULTRA_HDR("Ultra HDR / Cinematic");
+
+        private final String displayName;
+
+        QualityPreset(String displayName) {
+            this.displayName = displayName;
+        }
+
+        public String getDisplayName() {
+            return displayName;
+        }
+    }
+
     public enum RayQueryQuality {
         PERFORMANCE(1, 1.0f, "Performance"),
         BALANCED(2, 1.5f, "Balanced"),
@@ -117,11 +134,108 @@ public class MCTraceConfig {
     public static boolean enableWaterReflections = true; // Screen-Space Reflections (SSR) & Caustics
     public static boolean enableDynamicColoredLight = true; // Dynamic Coloured Block Radiosity & Emissive Glow
 
+    // Atmosphere & Volumetric Lighting
+    public static boolean enableVolumetricFog = true;
+    public static float volumetricFogDensity = 1.0f;
+    public static boolean enableGodRays = true;
+    public static float godRaysIntensity = 1.0f;
+
+    // Weather & Dynamic PBR
+    public static boolean enableRainWetness = true;
+
+    // Dynamic Lighting
+    public static boolean enableHeldDynamicLights = true;
+
+    // Material Depth & POM
+    public static boolean enableParallaxOcclusion = true;
+    public static float pomDepth = 0.04f;
+
+    // Cinematic Post-Processing
+    public static boolean enableMotionBlur = false;
+    public static float motionBlurStrength = 0.5f;
+    public static boolean enableBokehDof = false;
+    public static float dofFocalDistance = 0.0f;
+
     // Advanced Quality & Shading Parameters
+    public static QualityPreset currentPreset = QualityPreset.BALANCED;
     public static SsaoIntensity ssaoIntensity = SsaoIntensity.STANDARD;
     public static RayQueryQuality rayQueryQuality = RayQueryQuality.BALANCED;
 
+    public static void applyPreset(QualityPreset preset) {
+        currentPreset = preset;
+        switch (preset) {
+            case PERFORMANCE -> {
+                enableRayTracing = true;
+                rayTracingMode = RayTracingMode.RAY_QUERY_HYBRID;
+                rayQueryQuality = RayQueryQuality.PERFORMANCE;
+                enableFSR = true;
+                fsrQualityMode = FsrQualityMode.BALANCED;
+                enableDenoiser = true;
+                ssaoIntensity = SsaoIntensity.SUBTLE;
+                enableVolumetricFog = true;
+                volumetricFogDensity = 0.6f;
+                enableGodRays = true;
+                godRaysIntensity = 0.7f;
+                enableRainWetness = true;
+                enableHeldDynamicLights = true;
+                enablePbrMaterials = true;
+                enableWaterReflections = true;
+                enableDynamicColoredLight = true;
+                enableParallaxOcclusion = false;
+                enableMotionBlur = false;
+                enableBokehDof = false;
+            }
+            case BALANCED -> {
+                enableRayTracing = true;
+                rayTracingMode = RayTracingMode.RAY_QUERY_HYBRID;
+                rayQueryQuality = RayQueryQuality.BALANCED;
+                enableFSR = true;
+                fsrQualityMode = FsrQualityMode.QUALITY;
+                enableDenoiser = true;
+                ssaoIntensity = SsaoIntensity.STANDARD;
+                enableVolumetricFog = true;
+                volumetricFogDensity = 1.0f;
+                enableGodRays = true;
+                godRaysIntensity = 1.0f;
+                enableRainWetness = true;
+                enableHeldDynamicLights = true;
+                enablePbrMaterials = true;
+                enableWaterReflections = true;
+                enableDynamicColoredLight = true;
+                enableParallaxOcclusion = true;
+                pomDepth = 0.04f;
+                enableMotionBlur = false;
+                enableBokehDof = false;
+            }
+            case ULTRA_HDR -> {
+                enableRayTracing = true;
+                rayTracingMode = RayTracingMode.RAY_QUERY_HYBRID;
+                rayQueryQuality = RayQueryQuality.QUALITY;
+                enableFSR = true;
+                fsrQualityMode = FsrQualityMode.ULTRA_QUALITY;
+                enableDenoiser = true;
+                ssaoIntensity = SsaoIntensity.ENHANCED;
+                enableVolumetricFog = true;
+                volumetricFogDensity = 1.3f;
+                enableGodRays = true;
+                godRaysIntensity = 1.4f;
+                enableRainWetness = true;
+                enableHeldDynamicLights = true;
+                enablePbrMaterials = true;
+                enableWaterReflections = true;
+                enableDynamicColoredLight = true;
+                enableParallaxOcclusion = true;
+                pomDepth = 0.06f;
+                enableMotionBlur = true;
+                motionBlurStrength = 0.6f;
+                enableBokehDof = true;
+            }
+            case CUSTOM -> {}
+        }
+    }
+
     public static class ConfigData {
+        public QualityPreset currentPreset = QualityPreset.BALANCED;
         public boolean enableRayTracing = true;
         public RayTracingMode rayTracingMode = RayTracingMode.RAY_QUERY_HYBRID;
         public boolean enableFSR = true;
@@ -144,6 +258,18 @@ public class MCTraceConfig {
         public boolean enablePbrMaterials = true;
         public boolean enableWaterReflections = true;
         public boolean enableDynamicColoredLight = true;
+        public boolean enableVolumetricFog = true;
+        public float volumetricFogDensity = 1.0f;
+        public boolean enableGodRays = true;
+        public float godRaysIntensity = 1.0f;
+        public boolean enableRainWetness = true;
+        public boolean enableHeldDynamicLights = true;
+        public boolean enableParallaxOcclusion = true;
+        public float pomDepth = 0.04f;
+        public boolean enableMotionBlur = false;
+        public float motionBlurStrength = 0.5f;
+        public boolean enableBokehDof = false;
+        public float dofFocalDistance = 0.0f;
         public SsaoIntensity ssaoIntensity = SsaoIntensity.STANDARD;
         public RayQueryQuality rayQueryQuality = RayQueryQuality.BALANCED;
     }
@@ -175,6 +301,19 @@ public class MCTraceConfig {
             data.enablePbrMaterials = enablePbrMaterials;
             data.enableWaterReflections = enableWaterReflections;
             data.enableDynamicColoredLight = enableDynamicColoredLight;
+            data.currentPreset = currentPreset;
+            data.enableVolumetricFog = enableVolumetricFog;
+            data.volumetricFogDensity = volumetricFogDensity;
+            data.enableGodRays = enableGodRays;
+            data.godRaysIntensity = godRaysIntensity;
+            data.enableRainWetness = enableRainWetness;
+            data.enableHeldDynamicLights = enableHeldDynamicLights;
+            data.enableParallaxOcclusion = enableParallaxOcclusion;
+            data.pomDepth = pomDepth;
+            data.enableMotionBlur = enableMotionBlur;
+            data.motionBlurStrength = motionBlurStrength;
+            data.enableBokehDof = enableBokehDof;
+            data.dofFocalDistance = dofFocalDistance;
             data.ssaoIntensity = ssaoIntensity;
             data.rayQueryQuality = rayQueryQuality;
 
@@ -193,6 +332,7 @@ public class MCTraceConfig {
                 String json = Files.readString(path);
                 ConfigData data = GSON.fromJson(json, ConfigData.class);
                 if (data != null) {
+                    if (data.currentPreset != null) currentPreset = data.currentPreset;
                     enableRayTracing = data.enableRayTracing;
                     if (data.rayTracingMode != null) rayTracingMode = data.rayTracingMode;
                     enableFSR = data.enableFSR;
@@ -215,6 +355,18 @@ public class MCTraceConfig {
                     enablePbrMaterials = data.enablePbrMaterials;
                     enableWaterReflections = data.enableWaterReflections;
                     enableDynamicColoredLight = data.enableDynamicColoredLight;
+                    enableVolumetricFog = data.enableVolumetricFog;
+                    if (data.volumetricFogDensity > 0.0f) volumetricFogDensity = data.volumetricFogDensity;
+                    enableGodRays = data.enableGodRays;
+                    if (data.godRaysIntensity > 0.0f) godRaysIntensity = data.godRaysIntensity;
+                    enableRainWetness = data.enableRainWetness;
+                    enableHeldDynamicLights = data.enableHeldDynamicLights;
+                    enableParallaxOcclusion = data.enableParallaxOcclusion;
+                    if (data.pomDepth > 0.0f) pomDepth = data.pomDepth;
+                    enableMotionBlur = data.enableMotionBlur;
+                    if (data.motionBlurStrength > 0.0f) motionBlurStrength = data.motionBlurStrength;
+                    enableBokehDof = data.enableBokehDof;
+                    dofFocalDistance = data.dofFocalDistance;
                     if (data.ssaoIntensity != null) ssaoIntensity = data.ssaoIntensity;
                     if (data.rayQueryQuality != null) rayQueryQuality = data.rayQueryQuality;
                     MCTrace.LOGGER.info("[MCTrace] Loaded configuration from {}", path);

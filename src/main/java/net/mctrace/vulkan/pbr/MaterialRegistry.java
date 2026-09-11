@@ -102,6 +102,56 @@ public class MaterialRegistry {
     }
 
     /**
+     * LabPBR 1.3 Specular Channel Decoder.
+     * Maps RGBA channels from a LabPBR _s texture to physical material properties:
+     * - R: Smoothness (Roughness = 1.0 - Smoothness)
+     * - G: F0 / Metallic (values >= 230 represent metals)
+     * - B: Porosity / SSS
+     * - A: Emissive radiance
+     */
+    public static class LabPbrDecoded {
+        public final float roughness;
+        public final float metallic;
+        public final float f0;
+        public final float porosity;
+        public final float emission;
+
+        public LabPbrDecoded(int r, int g, int b, int a) {
+            float smoothness = (r & 0xFF) / 255.0f;
+            this.roughness = Math.max(0.04f, 1.0f - smoothness);
+            int gVal = g & 0xFF;
+            if (gVal >= 230) {
+                this.metallic = ((gVal - 230) / 25.0f);
+                this.f0 = 1.0f;
+            } else {
+                this.metallic = 0.0f;
+                this.f0 = (gVal / 255.0f);
+            }
+            this.porosity = (b & 0xFF) / 255.0f;
+            this.emission = (a & 0xFF) / 255.0f;
+        }
+    }
+
+    /**
+     * Determines whether a block supports Parallax Occlusion Mapping (POM) 3D relief.
+     * High relief blocks include bricks, cobblestone, planks, deepslate, and ore veins.
+     */
+    public static float getPomDepthForBlock(String identifier) {
+        if (identifier == null) return 0.0f;
+        String lower = identifier.toLowerCase();
+        if (lower.contains("brick") || lower.contains("cobblestone") || lower.contains("deepslate_tiles")) {
+            return 0.065f;
+        }
+        if (lower.contains("planks") || lower.contains("log") || lower.contains("carved") || lower.contains("chiseled")) {
+            return 0.045f;
+        }
+        if (lower.contains("ore") || lower.contains("gravel")) {
+            return 0.035f;
+        }
+        return 0.0f;
+    }
+
+    /**
      * Allocates or retrieves an existing descriptor index for a texture resource path.
      */
     public static int getOrAllocateTexture(String textureIdentifier) {
@@ -127,3 +177,4 @@ public class MaterialRegistry {
         registerMaterial(PbrMaterial.DEFAULT);
     }
 }
+
