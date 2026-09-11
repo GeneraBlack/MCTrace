@@ -3,11 +3,13 @@ package net.mctrace.vulkan.graph;
 import net.mctrace.MCTrace;
 import net.mctrace.config.MCTraceConfig;
 import net.mctrace.render.gbuffer.GBufferManager;
+import net.mctrace.vulkan.rt.CompositePipeline;
 import net.mctrace.vulkan.rt.DenoiserPipeline;
 import net.mctrace.vulkan.rt.FsrPipeline;
 import net.mctrace.vulkan.rt.RayTracingPipeline;
 import net.mctrace.vulkan.rt.TlasManager;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import org.joml.Vector3f;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -29,6 +31,9 @@ public class RenderGraph {
         }
 
         PASSES.clear();
+
+        // Initialize compute pipelines
+        CompositePipeline.initialize();
 
         // Pass 1: G-Buffer Allocation & Verification
         RenderPassNode gbufferPass = new RenderPassNode("gbuffer_pass", () -> {
@@ -76,7 +81,10 @@ public class RenderGraph {
 
         // Pass 6: Final Composite & Swapchain Presentation
         RenderPassNode compositePass = new RenderPassNode("composite_pass", () -> {
-            // Composite to swapchain
+            int w = GBufferManager.getNativeWidth();
+            int h = GBufferManager.getNativeHeight();
+            Vector3f sunDir = new Vector3f(0.5f, 0.8f, 0.3f).normalize();
+            CompositePipeline.dispatch(w, h, sunDir, 0.5f);
         }).dependsOn("fsr_upscaled");
 
         PASSES.add(gbufferPass);

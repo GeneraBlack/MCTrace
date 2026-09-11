@@ -4,6 +4,7 @@ import com.mojang.logging.LogUtils;
 import net.mctrace.config.MCTraceKeybinds;
 import net.mctrace.gui.MCTraceConfigScreen;
 import net.mctrace.vulkan.VulkanCapabilities;
+import net.mctrace.vulkan.rt.CompositePipeline;
 import net.mctrace.vulkan.rt.DenoiserPipeline;
 import net.mctrace.vulkan.rt.FsrPipeline;
 import net.mctrace.vulkan.rt.RayTracingPipeline;
@@ -57,6 +58,7 @@ public class MCTrace {
         RayTracingPipeline.initialize();
         DenoiserPipeline.initialize();
         FsrPipeline.initialize();
+        CompositePipeline.initialize();
 
         if (VulkanCapabilities.isVulkanInitialized()) {
             VulkanCapabilities.logCapabilities();

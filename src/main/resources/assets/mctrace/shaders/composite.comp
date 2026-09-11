@@ -1,0 +1,79 @@
+#version 460
+#extension GL_EXT_nonuniform_qualifier : enable
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+// G-Buffer and Ray Tracing input images
+layout(set = 0, binding = 0, rgba16f) uniform readonly image2D inSceneColor;
+layout(set = 0, binding = 1) uniform sampler2D inDepth;
+layout(set = 0, binding = 2, rgba16f) uniform readonly image2D inRayIllumination;
+layout(set = 0, binding = 3, rgba16f) uniform writeonly image2D outCompositedColor;
+
+// Push constants for frame parameters
+layout(push_constant) uniform FrameParameters {
+    vec4 sunDirection;      // xyz = normalized sun vector, w = time of day (0..1)
+    vec4 sunColor;          // rgb = sun light color intensity, a = sun intensity
+    vec4 ambientColor;      // rgb = ambient sky light, a = exposure scale
+    ivec4 renderSettings;   // x = width, y = height, z = rtMode (0=off, 1=fast, 2=full), w = tonemapMode
+} params;
+
+// Simple fast Reinhard-Jodie tonemapper
+vec3 tonemap(vec3 c) {
+    float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    vec3 tc = c / (vec3(1.0) + c);
+    return mix(c / (1.0 + l), tc, tc);
+}
+
+void main() {
+    ivec2 pixelCoord = ivec2(gl_GlobalInvocationID.xy);
+    if (pixelCoord.x >= params.renderSettings.x || pixelCoord.y >= params.renderSettings.y) {
+        return;
+    }
+
+    vec4 baseColor = imageLoad(inSceneColor, pixelCoord);
+    vec2 uv = (vec2(pixelCoord) + vec2(0.5)) / vec2(params.renderSettings.xy);
+    float depth = texture(inDepth, uv).r;
+
+    // If pixel is background sky (depth at near 1.0 or 0.0 depending on reverse-Z)
+    // pass sky through directly with slight atmospheric bloom
+    if (depth >= 0.9999 || depth <= 0.0001) {
+        imageStore(outCompositedColor, pixelCoord, baseColor);
+        return;
+    }
+
+    int rtMode = params.renderSettings.z;
+    if (rtMode == 0) {
+        // Ray tracing disabled: output unmodified rasterized color
+        imageStore(outCompositedColor, pixelCoord, baseColor);
+        return;
+    }
+
+    // Read Ray Tracing & Denoiser output:
+    // r = direct shadow visibility (0.0 = hard shadow, 1.0 = full sun)
+    // g = ambient occlusion (0.0 = full contact occlusion, 1.0 = open sky exposure)
+    // b = indirect diffuse bounce (if full GI active)
+    vec4 rtData = imageLoad(inRayIllumination, pixelCoord);
+    float shadowVisibility = clamp(rtData.r, 0.05, 1.0);
+    float ambientOcclusion = clamp(rtData.g, 0.15, 1.0);
+
+    // Compute composite lighting
+    vec3 sunLight = params.sunColor.rgb * (params.sunColor.a * shadowVisibility);
+    vec3 ambient = params.ambientColor.rgb * (ambientOcclusion * 0.45);
+
+    if (rtMode == 2) {
+        // Full path-traced GI: add indirect light contribution
+        vec3 indirectLight = vec3(rtData.b) * params.sunColor.rgb * 0.35;
+        ambient += indirectLight;
+    }
+
+    vec3 compositeLight = ambient + sunLight;
+    vec3 finalRgb = baseColor.rgb * compositeLight;
+
+    // Exposure adjustment
+    finalRgb *= params.ambientColor.a;
+
+    // Tonemap
+    finalRgb = tonemap(finalRgb);
+
+    imageStore(outCompositedColor, pixelCoord, vec4(finalRgb, baseColor.a));
+}
