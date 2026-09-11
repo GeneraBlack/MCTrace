@@ -40,6 +40,14 @@ public class MCTrace {
                 IConfigScreenFactory.class,
                 (container, lastScreen) -> new MCTraceConfigScreen(lastScreen)
         );
+
+        // Ensure FML early window is disabled for Vulkan compatibility
+        try {
+            if (net.neoforged.fml.loading.FMLConfig.getBoolConfigValue(net.neoforged.fml.loading.FMLConfig.ConfigValue.EARLY_WINDOW_CONTROL)) {
+                net.neoforged.fml.loading.FMLConfig.updateConfig(net.neoforged.fml.loading.FMLConfig.ConfigValue.EARLY_WINDOW_CONTROL, false);
+                LOGGER.info("[MCTrace] Disabled FML earlyWindowControl in config/fml.toml for Vulkan compatibility.");
+            }
+        } catch (Throwable ignored) {}
     }
 
     private void onClientSetup(final FMLClientSetupEvent event) {
