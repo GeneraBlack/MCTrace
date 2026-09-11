@@ -46,7 +46,22 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build with Gradle
-        run: ./gradlew build --no-daemon --stacktrace
+        id: build
+        run: |
+          ./gradlew build --no-daemon --stacktrace 2>&1 | tee gradle-build.log
+        continue-on-error: true
+
+      - name: Report Build Results
+        run: |
+          if [ "${{ steps.build.outcome }}" != "success" ]; then
+            echo "## ❌ Gradle Build Failed" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            tail -n 120 gradle-build.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            exit 1
+          else
+            echo "## ✔ Gradle Build Succeeded" >> $GITHUB_STEP_SUMMARY
+          fi
 
       - name: Verify build artifacts
         run: |
