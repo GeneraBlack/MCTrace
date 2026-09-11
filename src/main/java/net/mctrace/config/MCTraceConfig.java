@@ -32,6 +32,9 @@ public class MCTraceConfig {
     public static boolean enableFSR = true;
     public static FsrQualityMode fsrQualityMode = FsrQualityMode.QUALITY;
     public static boolean enableDenoiser = true;
+    public static float fsrSharpness = 0.8f;
     public static int raysPerPixel = 1;
+    public static int aoSampleCount = 2;
+    public static float aoRadius = 1.5f;
     public static int maxBounces = 3;
 }

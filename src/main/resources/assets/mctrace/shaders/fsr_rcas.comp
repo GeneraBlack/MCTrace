@@ -1,0 +1,57 @@
+#version 460
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(binding = 0, set = 0) uniform sampler2D inputTexture;
+layout(binding = 1, set = 0, rgba16f) writeonly uniform image2D outSharpened;
+
+layout(push_constant) uniform PushConstants {
+    int displayWidth;
+    int displayHeight;
+    float sharpness; // [0.0, 1.0], typical default 0.8
+} pc;
+
+// Fast approximate luminance
+float lum(vec3 c) {
+    return c.r * 0.25 + c.g * 0.5 + c.b * 0.25;
+}
+
+void main() {
+    ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
+    if (coord.x >= pc.displayWidth || coord.y >= pc.displayHeight) {
+        return;
+    }
+
+    vec2 texel = 1.0 / vec2(pc.displayWidth, pc.displayHeight);
+    vec2 uv = (vec2(coord) + 0.5) * texel;
+
+    // 5-tap cross pattern
+    //     [b]
+    // [d] [e] [f]
+    //     [h]
+    vec3 e = texture(inputTexture, uv).rgb;
+    vec3 b = texture(inputTexture, uv + vec2(0.0, -texel.y)).rgb;
+    vec3 d = texture(inputTexture, uv + vec2(-texel.x, 0.0)).rgb;
+    vec3 f = texture(inputTexture, uv + vec2(texel.x, 0.0)).rgb;
+    vec3 h = texture(inputTexture, uv + vec2(0.0, texel.y)).rgb;
+
+    float lb = lum(b);
+    float ld = lum(d);
+    float le = lum(e);
+    float lf = lum(f);
+    float lh = lum(h);
+
+    // Min and max local luminance
+    float minL = min(le, min(min(lb, ld), min(lf, lh)));
+    float maxL = max(le, max(max(lb, ld), max(lf, lh)));
+
+    // Contrast-adaptive sharpening weight calculation
+    float range = maxL - minL;
+    float peak = -1.0 / max(8.0, 4.0 + (1.0 - pc.sharpness) * 4.0);
+    float w = clamp(min(minL, 2.0 - maxL) / max(0.001, maxL), 0.0, 1.0) * peak;
+
+    // Filtered result
+    vec3 sharpened = (e + w * (b + d + f + h)) / (1.0 + 4.0 * w);
+    sharpened = max(vec3(0.0), sharpened);
+
+    imageStore(outSharpened, coord, vec4(sharpened, 1.0));
+}
