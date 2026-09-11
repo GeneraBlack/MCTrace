@@ -122,7 +122,7 @@ public class MCTraceCalibrationScreen extends Screen {
         );
         this.addRenderableWidget(peakLumSlider);
 
-        // --- Row 3: Black Level Floor ---
+        // --- Row 3: Black Level Floor & Monitor Sync ---
         // 5. Min Luminance / Black Level (0.000 to 0.100 Nits, default 0.000 Nits)
         double initialMin = Math.max(0.0, Math.min(1.0, MCTraceConfig.hdrMinLuminance / 0.100f));
         minLumSlider = new CalibrationSlider(
@@ -135,24 +135,34 @@ public class MCTraceCalibrationScreen extends Screen {
         );
         this.addRenderableWidget(minLumSlider);
 
-        // 6. Reset Defaults Button
+        // 6. One-Click Sync with Monitor Peak Luminance (Sync with Windows HDR)
+        float targetNits = net.mctrace.vulkan.hdr.DisplayHdrSync.getDetectedPeakLuminance();
+        this.addRenderableWidget(
+                Button.builder(Component.literal(String.format("§e⚡ Sync Monitor (%d Nits)§r", (int) targetNits)), btn -> {
+                    float syncedNits = net.mctrace.vulkan.hdr.DisplayHdrSync.syncWithMonitor();
+                    peakLumSlider.updateNormalizedValue((syncedNits - 400.0) / 2100.0);
+                    btn.setMessage(Component.literal(String.format("§a✓ Synced (%d Nits)§r", (int) syncedNits)));
+                }).bounds(col2X, sliderStartY + spacing * 2, sliderWidth, sliderHeight).build()
+        );
+
+        // 7. Reset Defaults Button
         this.addRenderableWidget(
                 Button.builder(Component.literal("Reset Defaults"), btn -> {
                     MCTraceConfig.sceneBrightness = 1.15f;
                     MCTraceConfig.hdrMiddleGrayContrast = 1.00f;
                     MCTraceConfig.hdrPaperWhite = 200.0f;
-                    MCTraceConfig.hdrPeakLuminance = 1000.0f;
+                    MCTraceConfig.hdrPeakLuminance = 456.0f;
                     MCTraceConfig.hdrMinLuminance = 0.000f;
 
                     brightnessSlider.updateNormalizedValue((1.15 - 0.70) / 0.90);
                     contrastSlider.updateNormalizedValue((1.00 - 0.80) / 0.70);
                     paperWhiteSlider.updateNormalizedValue((200.0 - 80.0) / 320.0);
-                    peakLumSlider.updateNormalizedValue((1000.0 - 400.0) / 2100.0);
+                    peakLumSlider.updateNormalizedValue((456.0 - 400.0) / 2100.0);
                     minLumSlider.updateNormalizedValue(0.0);
                 }).bounds(centerX - 105, sliderStartY + spacing * 3 + 6, 100, 20).build()
         );
 
-        // 7. Save & Done Button
+        // 8. Save & Done Button
         this.addRenderableWidget(
                 Button.builder(CommonComponents.GUI_DONE, btn -> {
                     MCTraceConfig.hdrCalibrated = true;
@@ -170,9 +180,9 @@ public class MCTraceCalibrationScreen extends Screen {
 
         int centerX = this.width / 2;
 
-        // Header Title
-        extractor.centeredText(this.font, Component.literal("§6MCTrace Display & HDR Calibration§r"), centerX, 10, 0xFFFFFF);
-        extractor.centeredText(this.font, Component.literal("§7Calibrate Scene Brightness, Black Level, Contrast, and Peak White§r"), centerX, 22, 0xAAAAAA);
+        // Header Title & Active Monitor info
+        extractor.centeredText(this.font, Component.literal("§6MCTrace Display & HDR Calibration§r"), centerX, 8, 0xFFFFFF);
+        extractor.centeredText(this.font, Component.literal("§7Monitor: §e" + net.mctrace.vulkan.hdr.DisplayHdrSync.getDetectedMonitorName() + "§7 | Format: §b" + MCTraceConfig.activeFormatName + "§r"), centerX, 20, 0xDDDDDD);
 
         int cardW = 100;
         int cardH = 68;

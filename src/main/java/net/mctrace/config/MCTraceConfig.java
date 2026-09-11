@@ -102,13 +102,20 @@ public class MCTraceConfig {
     // True HDR & Display Configuration
     public static boolean enableHDR = true;
     public static float sceneBrightness = 1.15f;    // General scene brightness offset (0.70x - 1.60x)
-    public static float hdrPeakLuminance = 1000.0f; // Peak brightness in nits
+    public static float hdrPeakLuminance = 456.0f;  // Peak brightness in nits (auto-calibrated for GS27U)
     public static float hdrPaperWhite = 200.0f;    // Standard UI / paper white brightness in nits
     public static float hdrMinLuminance = 0.000f;   // Black level floor in nits (0.000 for OLED, 0.02-0.08 for LCD)
     public static float hdrMiddleGrayContrast = 1.0f; // Midtone contrast slope (0.8 - 1.5)
     public static boolean hdrCalibrated = false;    // Has the user completed display calibration
     public static boolean isHdrActive = false;     // True when swapchain is running in HDR mode
     public static String activeFormatName = "SDR (8-bit)"; // Detected swapchain surface format name
+    public static boolean enableWideGamut = true;   // DCI-P3 / BT.2020 Wide Color Gamut Expansion
+    public static float wideGamutStrength = 1.0f;   // Wide Color Gamut intensity (0.0x - 1.5x)
+
+    // Tier 2: World Shading & Material Realism
+    public static boolean enablePbrMaterials = true;     // LabPBR Specular & Roughness
+    public static boolean enableWaterReflections = true; // Screen-Space Reflections (SSR) & Caustics
+    public static boolean enableDynamicColoredLight = true; // Dynamic Coloured Block Radiosity & Emissive Glow
 
     // Advanced Quality & Shading Parameters
     public static SsaoIntensity ssaoIntensity = SsaoIntensity.STANDARD;
@@ -127,11 +134,16 @@ public class MCTraceConfig {
         public int maxBounces = 3;
         public boolean enableHDR = true;
         public float sceneBrightness = 1.15f;
-        public float hdrPeakLuminance = 1000.0f;
+        public float hdrPeakLuminance = 456.0f;
         public float hdrPaperWhite = 200.0f;
         public float hdrMinLuminance = 0.000f;
         public float hdrMiddleGrayContrast = 1.0f;
         public boolean hdrCalibrated = false;
+        public boolean enableWideGamut = true;
+        public float wideGamutStrength = 1.0f;
+        public boolean enablePbrMaterials = true;
+        public boolean enableWaterReflections = true;
+        public boolean enableDynamicColoredLight = true;
         public SsaoIntensity ssaoIntensity = SsaoIntensity.STANDARD;
         public RayQueryQuality rayQueryQuality = RayQueryQuality.BALANCED;
     }
@@ -158,6 +170,11 @@ public class MCTraceConfig {
             data.hdrMinLuminance = hdrMinLuminance;
             data.hdrMiddleGrayContrast = hdrMiddleGrayContrast;
             data.hdrCalibrated = hdrCalibrated;
+            data.enableWideGamut = enableWideGamut;
+            data.wideGamutStrength = wideGamutStrength;
+            data.enablePbrMaterials = enablePbrMaterials;
+            data.enableWaterReflections = enableWaterReflections;
+            data.enableDynamicColoredLight = enableDynamicColoredLight;
             data.ssaoIntensity = ssaoIntensity;
             data.rayQueryQuality = rayQueryQuality;
 
@@ -170,6 +187,7 @@ public class MCTraceConfig {
 
     public static synchronized void load() {
         try {
+            net.mctrace.vulkan.hdr.DisplayHdrSync.queryMonitorCapabilitiesAsync();
             Path path = FMLPaths.CONFIGDIR.get().resolve("mctrace.json");
             if (Files.exists(path)) {
                 String json = Files.readString(path);
@@ -192,6 +210,11 @@ public class MCTraceConfig {
                     hdrMinLuminance = Math.max(0.0f, data.hdrMinLuminance);
                     if (data.hdrMiddleGrayContrast > 0.0f) hdrMiddleGrayContrast = data.hdrMiddleGrayContrast;
                     hdrCalibrated = data.hdrCalibrated;
+                    enableWideGamut = data.enableWideGamut;
+                    if (data.wideGamutStrength > 0.0f) wideGamutStrength = data.wideGamutStrength;
+                    enablePbrMaterials = data.enablePbrMaterials;
+                    enableWaterReflections = data.enableWaterReflections;
+                    enableDynamicColoredLight = data.enableDynamicColoredLight;
                     if (data.ssaoIntensity != null) ssaoIntensity = data.ssaoIntensity;
                     if (data.rayQueryQuality != null) rayQueryQuality = data.rayQueryQuality;
                     MCTrace.LOGGER.info("[MCTrace] Loaded configuration from {}", path);
