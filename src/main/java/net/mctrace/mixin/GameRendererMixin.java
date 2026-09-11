@@ -3,6 +3,7 @@ package net.mctrace.mixin;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.resource.CrossFrameResourcePool;
 import net.mctrace.MCTrace;
+import net.mctrace.config.MCTraceConfig;
 import net.mctrace.render.camera.CameraHistory;
 import net.mctrace.render.gbuffer.GBufferManager;
 import net.mctrace.vulkan.rt.CompositePipeline;
@@ -46,7 +47,7 @@ public abstract class GameRendererMixin {
 
     @Inject(method = "renderLevel", at = @At("TAIL"))
     private void mctrace$onRenderLevelTail(DeltaTracker deltaTracker, CallbackInfo ci) {
-        if (this.mainRenderTarget != null) {
+        if (this.mainRenderTarget != null && MCTraceConfig.enableRayTracing && MCTraceConfig.rayTracingMode != MCTraceConfig.RayTracingMode.DISABLED) {
             int w = this.mainRenderTarget.width;
             int h = this.mainRenderTarget.height;
             if (w > 0 && h > 0) {

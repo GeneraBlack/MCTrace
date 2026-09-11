@@ -1,6 +1,7 @@
 package net.mctrace;
 
 import com.mojang.logging.LogUtils;
+import net.mctrace.config.MCTraceConfig;
 import net.mctrace.config.MCTraceKeybinds;
 import net.mctrace.gui.MCTraceConfigScreen;
 import net.mctrace.vulkan.VulkanCapabilities;
@@ -9,6 +10,7 @@ import net.mctrace.vulkan.rt.DenoiserPipeline;
 import net.mctrace.vulkan.rt.FsrPipeline;
 import net.mctrace.vulkan.rt.RayTracingPipeline;
 import net.minecraft.client.Minecraft;
+import net.minecraft.network.chat.Component;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
@@ -28,6 +30,9 @@ public class MCTrace {
 
     public MCTrace(IEventBus modEventBus, ModContainer modContainer) {
         LOGGER.info("[MCTrace] Initializing next-gen Vulkan RT & FSR engine...");
+
+        // Load saved configuration from disk
+        MCTraceConfig.load();
 
         // Register client lifecycle and keybind events
         modEventBus.addListener(this::onClientSetup);
@@ -69,6 +74,7 @@ public class MCTrace {
 
     private void onRegisterKeyMappings(final RegisterKeyMappingsEvent event) {
         event.register(MCTraceKeybinds.OPEN_CONFIG_KEY);
+        event.register(MCTraceKeybinds.TOGGLE_EFFECTS_KEY);
     }
 
     private void onClientTick(final ClientTickEvent.Post event) {
@@ -76,6 +82,17 @@ public class MCTrace {
             Minecraft mc = Minecraft.getInstance();
             if (mc.gui != null) {
                 mc.gui.setScreen(new MCTraceConfigScreen(mc.gui.screen()));
+            }
+        }
+
+        while (MCTraceKeybinds.TOGGLE_EFFECTS_KEY.consumeClick()) {
+            MCTraceConfig.enableRayTracing = !MCTraceConfig.enableRayTracing;
+            MCTraceConfig.save();
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.player != null) {
+                mc.player.sendOverlayMessage(
+                        Component.literal("§6[MCTrace]§r Shading & Effects: " + (MCTraceConfig.enableRayTracing ? "§aEnabled" : "§cDisabled"))
+                );
             }
         }
     }

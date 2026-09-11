@@ -1,6 +1,16 @@
 package net.mctrace.config;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import net.mctrace.MCTrace;
+import net.neoforged.fml.loading.FMLPaths;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 public class MCTraceConfig {
+
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
     public enum RayTracingMode {
         DISABLED,
@@ -26,6 +36,57 @@ public class MCTraceConfig {
         }
     }
 
+    public enum SsaoIntensity {
+        OFF(0.0f, "Off"),
+        SUBTLE(0.5f, "Subtle (50%)"),
+        STANDARD(1.0f, "Standard (100%)"),
+        ENHANCED(1.5f, "Enhanced (150%)");
+
+        private final float multiplier;
+        private final String displayName;
+
+        SsaoIntensity(float multiplier, String displayName) {
+            this.multiplier = multiplier;
+            this.displayName = displayName;
+        }
+
+        public float getMultiplier() {
+            return multiplier;
+        }
+
+        public String getDisplayName() {
+            return displayName;
+        }
+    }
+
+    public enum RayQueryQuality {
+        PERFORMANCE(1, 1.0f, "Performance"),
+        BALANCED(2, 1.5f, "Balanced"),
+        QUALITY(4, 2.5f, "Quality");
+
+        private final int sampleCount;
+        private final float radius;
+        private final String displayName;
+
+        RayQueryQuality(int sampleCount, float radius, String displayName) {
+            this.sampleCount = sampleCount;
+            this.radius = radius;
+            this.displayName = displayName;
+        }
+
+        public int getSampleCount() {
+            return sampleCount;
+        }
+
+        public float getRadius() {
+            return radius;
+        }
+
+        public String getDisplayName() {
+            return displayName;
+        }
+    }
+
     // Default configuration values
     public static boolean enableRayTracing = true;
     public static RayTracingMode rayTracingMode = RayTracingMode.RAY_QUERY_HYBRID;
@@ -43,4 +104,86 @@ public class MCTraceConfig {
     public static float hdrPeakLuminance = 1000.0f; // Peak brightness in nits
     public static float hdrPaperWhite = 200.0f;    // Standard UI / paper white brightness in nits
     public static boolean isHdrActive = false;     // True when swapchain is running in HDR mode
+
+    // Advanced Quality & Shading Parameters
+    public static SsaoIntensity ssaoIntensity = SsaoIntensity.STANDARD;
+    public static RayQueryQuality rayQueryQuality = RayQueryQuality.BALANCED;
+
+    public static class ConfigData {
+        public boolean enableRayTracing = true;
+        public RayTracingMode rayTracingMode = RayTracingMode.RAY_QUERY_HYBRID;
+        public boolean enableFSR = true;
+        public FsrQualityMode fsrQualityMode = FsrQualityMode.QUALITY;
+        public boolean enableDenoiser = true;
+        public float fsrSharpness = 0.8f;
+        public int raysPerPixel = 1;
+        public int aoSampleCount = 2;
+        public float aoRadius = 1.5f;
+        public int maxBounces = 3;
+        public boolean enableHDR = true;
+        public float hdrPeakLuminance = 1000.0f;
+        public float hdrPaperWhite = 200.0f;
+        public SsaoIntensity ssaoIntensity = SsaoIntensity.STANDARD;
+        public RayQueryQuality rayQueryQuality = RayQueryQuality.BALANCED;
+    }
+
+    public static synchronized void save() {
+        try {
+            Path path = FMLPaths.CONFIGDIR.get().resolve("mctrace.json");
+            Files.createDirectories(path.getParent());
+            ConfigData data = new ConfigData();
+            data.enableRayTracing = enableRayTracing;
+            data.rayTracingMode = rayTracingMode;
+            data.enableFSR = enableFSR;
+            data.fsrQualityMode = fsrQualityMode;
+            data.enableDenoiser = enableDenoiser;
+            data.fsrSharpness = fsrSharpness;
+            data.raysPerPixel = raysPerPixel;
+            data.aoSampleCount = aoSampleCount;
+            data.aoRadius = aoRadius;
+            data.maxBounces = maxBounces;
+            data.enableHDR = enableHDR;
+            data.hdrPeakLuminance = hdrPeakLuminance;
+            data.hdrPaperWhite = hdrPaperWhite;
+            data.ssaoIntensity = ssaoIntensity;
+            data.rayQueryQuality = rayQueryQuality;
+
+            Files.writeString(path, GSON.toJson(data));
+            MCTrace.LOGGER.info("[MCTrace] Saved configuration to {}", path);
+        } catch (Exception e) {
+            MCTrace.LOGGER.error("[MCTrace] Failed to save configuration: {}", e.getMessage());
+        }
+    }
+
+    public static synchronized void load() {
+        try {
+            Path path = FMLPaths.CONFIGDIR.get().resolve("mctrace.json");
+            if (Files.exists(path)) {
+                String json = Files.readString(path);
+                ConfigData data = GSON.fromJson(json, ConfigData.class);
+                if (data != null) {
+                    enableRayTracing = data.enableRayTracing;
+                    if (data.rayTracingMode != null) rayTracingMode = data.rayTracingMode;
+                    enableFSR = data.enableFSR;
+                    if (data.fsrQualityMode != null) fsrQualityMode = data.fsrQualityMode;
+                    enableDenoiser = data.enableDenoiser;
+                    fsrSharpness = data.fsrSharpness;
+                    raysPerPixel = data.raysPerPixel;
+                    aoSampleCount = data.aoSampleCount;
+                    aoRadius = data.aoRadius;
+                    maxBounces = data.maxBounces;
+                    enableHDR = data.enableHDR;
+                    hdrPeakLuminance = data.hdrPeakLuminance;
+                    if (data.hdrPaperWhite > 0.0f) hdrPaperWhite = data.hdrPaperWhite;
+                    if (data.ssaoIntensity != null) ssaoIntensity = data.ssaoIntensity;
+                    if (data.rayQueryQuality != null) rayQueryQuality = data.rayQueryQuality;
+                    MCTrace.LOGGER.info("[MCTrace] Loaded configuration from {}", path);
+                }
+            } else {
+                save(); // Write default configuration
+            }
+        } catch (Exception e) {
+            MCTrace.LOGGER.error("[MCTrace] Failed to load configuration: {}", e.getMessage());
+        }
+    }
 }
