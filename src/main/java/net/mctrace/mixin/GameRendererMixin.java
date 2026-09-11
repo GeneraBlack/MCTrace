@@ -45,8 +45,14 @@ public abstract class GameRendererMixin {
         CameraHistory.requestReset();
     }
 
-    @Inject(method = "renderLevel", at = @At("TAIL"))
-    private void mctrace$onRenderLevelTail(DeltaTracker deltaTracker, CallbackInfo ci) {
+    @Inject(
+            method = "renderLevel",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lcom/mojang/blaze3d/systems/CommandEncoder;clearDepthTexture(Lcom/mojang/blaze3d/textures/GpuTexture;D)V"
+            )
+    )
+    private void mctrace$onRenderLevelBeforeHand(DeltaTracker deltaTracker, CallbackInfo ci) {
         if (this.mainRenderTarget != null && MCTraceConfig.enableRayTracing && MCTraceConfig.rayTracingMode != MCTraceConfig.RayTracingMode.DISABLED) {
             int w = this.mainRenderTarget.width;
             int h = this.mainRenderTarget.height;
