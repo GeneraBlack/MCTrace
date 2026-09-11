@@ -52,6 +52,9 @@ public abstract class LevelRendererMixin {
 
             // 4. Prepare per-frame TLAS scene instances
             TlasManager.prepareFrame(cameraRenderState);
+
+            // 5. Execute dynamic Vulkan Render Graph
+            net.mctrace.vulkan.graph.RenderGraph.executeFrame(cameraRenderState);
         }
     }
 }
