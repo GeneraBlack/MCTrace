@@ -9,8 +9,8 @@ layout(std140) uniform SamplerInfo {
 };
 
 layout(std140) uniform MCTraceParams {
-    vec4 HdrConfig;       // x: minLum, y: paperWhite, z: peakLum, w: contrast
-    vec4 LightingConfig;  // x: isHdrActive, y: ssaoMultiplier, z: timeOfDay, w: unused
+    vec4 HdrConfig;       // x: sceneBrightness, y: paperWhite, z: peakLum, w: contrast
+    vec4 LightingConfig;  // x: isHdrActive, y: ssaoMultiplier, z: minLum, w: unused
 };
 
 in vec2 texCoord;
@@ -40,7 +40,11 @@ void main() {
     float depth = linearizeDepth(rawDepth);
 
     vec2 texel = 1.0 / InSize;
+    float sceneBrightness = HdrConfig.x > 0.0 ? HdrConfig.x : 1.15;
+    float contrast = HdrConfig.w > 0.0 ? HdrConfig.w : 1.0;
+    float isHdr = LightingConfig.x;
     float ssaoStrength = LightingConfig.y > 0.0 ? LightingConfig.y : 1.0;
+    float minLum = LightingConfig.z;
 
     bool isSky = (depth >= 9999.0);
     float aoFactor = 1.0;
@@ -76,8 +80,9 @@ void main() {
             }
         }
 
-        float aoOcclusion = (ao / 8.0) * (0.45 * ssaoStrength);
-        aoFactor = clamp(1.0 - aoOcclusion, 0.55, 1.0);
+        // Gentle SSAO: max 25% occlusion instead of 45% to preserve shadow detail
+        float aoOcclusion = (ao / 8.0) * (0.25 * ssaoStrength);
+        aoFactor = clamp(1.0 - aoOcclusion, 0.75, 1.0);
 
         // 2. Directional Sun lighting & Screen Space Contact Shadows
         vec3 sunDir = normalize(vec3(0.45, 0.82, 0.35));
@@ -90,7 +95,7 @@ void main() {
             float stepDepth = linearizeDepth(texture(MainDepthSampler, sampleUv).r);
             float depthDiff = depth - stepDepth;
             if (depthDiff > 0.02 && depthDiff < 0.8) {
-                shadow = 0.60; // Soft contact shadow
+                shadow = 0.75; // Soft gentle contact shadow
                 break;
             }
         }
@@ -101,10 +106,39 @@ void main() {
         float NdotH = max(dot(normal, halfDir), 0.0);
         specular = pow(NdotH, 32.0) * 0.35 * shadow * NdotL;
 
-        directSunMod = NdotL * shadow * 0.25;
+        directSunMod = NdotL * shadow * 0.20;
     }
 
     // 4. Illumination synthesis on 3D geometry
     vec3 shaded = rawColor.rgb * (aoFactor + directSunMod) + vec3(specular);
+
+    // 5. Apply General Scene Brightness Offset (keeps overworld vibrant & well-lit)
+    shaded *= sceneBrightness;
+
+    // 6. Filmic Contrast with Shadow Toe Flare / Preservation:
+    // Below 0.35 luma, smoothly taper the contrast curve towards linear so deep
+    // caves and dark blocks are never crushed into pitch black!
+    float luma = dot(shaded, vec3(0.2126, 0.7152, 0.0722));
+    float toeWeight = smoothstep(0.01, 0.35, luma);
+    if (abs(contrast - 1.0) > 0.01) {
+        float pivot = (isHdr > 0.5) ? 0.18 : 0.45;
+        vec3 curved = pow(max(shaded / pivot, vec3(0.0)), vec3(contrast)) * pivot;
+        shaded = mix(shaded, curved, toeWeight);
+    }
+
+    // 7. Black level floor calibration
+    if (minLum > 0.0) {
+        float floorVal = minLum * 0.1;
+        shaded = max(shaded, vec3(floorVal));
+    }
+
+    // 8. Color Vibrancy (enhances foliage, sky, and terrain without a gray veil)
+    float cLuma = dot(shaded, vec3(0.2126, 0.7152, 0.0722));
+    float cMax = max(shaded.r, max(shaded.g, shaded.b));
+    float cMin = min(shaded.r, min(shaded.g, shaded.b));
+    float cSat = (cMax - cMin) / max(cMax, 0.001);
+    float vibrance = 1.15; // +15% boost to rich colors
+    shaded = mix(vec3(cLuma), shaded, vibrance + (1.0 - cSat) * 0.10);
+
     fragColor = vec4(clamp(shaded, 0.0, 1.0), rawColor.a);
 }

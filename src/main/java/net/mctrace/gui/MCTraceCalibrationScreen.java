@@ -55,15 +55,16 @@ public class MCTraceCalibrationScreen extends Screen {
         }
     }
 
-    private CalibrationSlider minLumSlider;
+    private CalibrationSlider brightnessSlider;
+    private CalibrationSlider contrastSlider;
     private CalibrationSlider paperWhiteSlider;
     private CalibrationSlider peakLumSlider;
-    private CalibrationSlider contrastSlider;
+    private CalibrationSlider minLumSlider;
 
     @Override
     protected void init() {
         int centerX = this.width / 2;
-        int sliderStartY = Math.max(132, this.height / 2 + 10);
+        int sliderStartY = Math.max(118, this.height / 2 - 6);
         int sliderWidth = 160;
         int sliderHeight = 20;
         int spacing = 24;
@@ -71,19 +72,33 @@ public class MCTraceCalibrationScreen extends Screen {
         int col1X = centerX - sliderWidth - 10;
         int col2X = centerX + 10;
 
-        // 1. Min Luminance / Black Level (0.000 to 0.100 Nits)
-        double initialMin = Math.max(0.0, Math.min(1.0, MCTraceConfig.hdrMinLuminance / 0.100f));
-        minLumSlider = new CalibrationSlider(
-                col1X, sliderStartY, sliderWidth, sliderHeight, initialMin,
+        // --- Row 1: Scene Brightness & Contrast ---
+        // 1. Scene Brightness Offset (0.70x to 1.60x, default 1.15x)
+        double initialBrightness = Math.max(0.0, Math.min(1.0, (MCTraceConfig.sceneBrightness - 0.70f) / 0.90f));
+        brightnessSlider = new CalibrationSlider(
+                col1X, sliderStartY, sliderWidth, sliderHeight, initialBrightness,
                 val -> {
-                    float nits = (float) (val * 0.100);
-                    return Component.literal(String.format("Black: %.3f Nits", nits));
+                    float brightness = (float) (0.70 + val * 0.90);
+                    return Component.literal(String.format("Scene Brightness: %.2fx", brightness));
                 },
-                val -> MCTraceConfig.hdrMinLuminance = (float) (val * 0.100)
+                val -> MCTraceConfig.sceneBrightness = (float) (0.70 + val * 0.90)
         );
-        this.addRenderableWidget(minLumSlider);
+        this.addRenderableWidget(brightnessSlider);
 
-        // 2. Paper White / Middle Gray (80 to 400 Nits)
+        // 2. Middle Gray Contrast / Gamma (0.80x to 1.50x, default 1.00x)
+        double initialContrast = Math.max(0.0, Math.min(1.0, (MCTraceConfig.hdrMiddleGrayContrast - 0.80f) / 0.70f));
+        contrastSlider = new CalibrationSlider(
+                col2X, sliderStartY, sliderWidth, sliderHeight, initialContrast,
+                val -> {
+                    float contrast = (float) (0.80 + val * 0.70);
+                    return Component.literal(String.format("Contrast: %.2fx", contrast));
+                },
+                val -> MCTraceConfig.hdrMiddleGrayContrast = (float) (0.80 + val * 0.70)
+        );
+        this.addRenderableWidget(contrastSlider);
+
+        // --- Row 2: Paper White (UI) & Peak White ---
+        // 3. Paper White / Middle Gray (80 to 400 Nits, default 200 Nits)
         double initialPaper = Math.max(0.0, Math.min(1.0, (MCTraceConfig.hdrPaperWhite - 80.0f) / 320.0f));
         paperWhiteSlider = new CalibrationSlider(
                 col1X, sliderStartY + spacing, sliderWidth, sliderHeight, initialPaper,
@@ -95,10 +110,10 @@ public class MCTraceCalibrationScreen extends Screen {
         );
         this.addRenderableWidget(paperWhiteSlider);
 
-        // 3. Peak Luminance / Max White (400 to 2500 Nits)
+        // 4. Peak Luminance / Max White (400 to 2500 Nits, default 1000 Nits)
         double initialPeak = Math.max(0.0, Math.min(1.0, (MCTraceConfig.hdrPeakLuminance - 400.0f) / 2100.0f));
         peakLumSlider = new CalibrationSlider(
-                col2X, sliderStartY, sliderWidth, sliderHeight, initialPeak,
+                col2X, sliderStartY + spacing, sliderWidth, sliderHeight, initialPeak,
                 val -> {
                     int nits = (int) (400.0 + val * 2100.0);
                     return Component.literal(String.format("Peak White: %d Nits", nits));
@@ -107,34 +122,37 @@ public class MCTraceCalibrationScreen extends Screen {
         );
         this.addRenderableWidget(peakLumSlider);
 
-        // 4. Middle Gray Contrast / Gamma (0.80x to 1.50x)
-        double initialContrast = Math.max(0.0, Math.min(1.0, (MCTraceConfig.hdrMiddleGrayContrast - 0.80f) / 0.70f));
-        contrastSlider = new CalibrationSlider(
-                col2X, sliderStartY + spacing, sliderWidth, sliderHeight, initialContrast,
+        // --- Row 3: Black Level Floor ---
+        // 5. Min Luminance / Black Level (0.000 to 0.100 Nits, default 0.000 Nits)
+        double initialMin = Math.max(0.0, Math.min(1.0, MCTraceConfig.hdrMinLuminance / 0.100f));
+        minLumSlider = new CalibrationSlider(
+                col1X, sliderStartY + spacing * 2, sliderWidth, sliderHeight, initialMin,
                 val -> {
-                    float contrast = (float) (0.80 + val * 0.70);
-                    return Component.literal(String.format("Contrast: %.2fx", contrast));
+                    float nits = (float) (val * 0.100);
+                    return Component.literal(String.format("Black Level: %.3f Nits", nits));
                 },
-                val -> MCTraceConfig.hdrMiddleGrayContrast = (float) (0.80 + val * 0.70)
+                val -> MCTraceConfig.hdrMinLuminance = (float) (val * 0.100)
         );
-        this.addRenderableWidget(contrastSlider);
+        this.addRenderableWidget(minLumSlider);
 
-        // 5. Reset Defaults Button
+        // 6. Reset Defaults Button
         this.addRenderableWidget(
                 Button.builder(Component.literal("Reset Defaults"), btn -> {
-                    MCTraceConfig.hdrMinLuminance = 0.000f;
+                    MCTraceConfig.sceneBrightness = 1.15f;
+                    MCTraceConfig.hdrMiddleGrayContrast = 1.00f;
                     MCTraceConfig.hdrPaperWhite = 200.0f;
                     MCTraceConfig.hdrPeakLuminance = 1000.0f;
-                    MCTraceConfig.hdrMiddleGrayContrast = 1.00f;
+                    MCTraceConfig.hdrMinLuminance = 0.000f;
 
-                    minLumSlider.updateNormalizedValue(0.0);
+                    brightnessSlider.updateNormalizedValue((1.15 - 0.70) / 0.90);
+                    contrastSlider.updateNormalizedValue((1.00 - 0.80) / 0.70);
                     paperWhiteSlider.updateNormalizedValue((200.0 - 80.0) / 320.0);
                     peakLumSlider.updateNormalizedValue((1000.0 - 400.0) / 2100.0);
-                    contrastSlider.updateNormalizedValue((1.00 - 0.80) / 0.70);
-                }).bounds(centerX - 105, sliderStartY + spacing * 2 + 10, 100, 20).build()
+                    minLumSlider.updateNormalizedValue(0.0);
+                }).bounds(centerX - 105, sliderStartY + spacing * 3 + 6, 100, 20).build()
         );
 
-        // 6. Save & Done Button
+        // 7. Save & Done Button
         this.addRenderableWidget(
                 Button.builder(CommonComponents.GUI_DONE, btn -> {
                     MCTraceConfig.hdrCalibrated = true;
@@ -142,7 +160,7 @@ public class MCTraceCalibrationScreen extends Screen {
                     if (this.minecraft != null) {
                         this.minecraft.gui.setScreen(this.lastScreen);
                     }
-                }).bounds(centerX + 5, sliderStartY + spacing * 2 + 10, 100, 20).build()
+                }).bounds(centerX + 5, sliderStartY + spacing * 3 + 6, 100, 20).build()
         );
     }
 
@@ -153,12 +171,12 @@ public class MCTraceCalibrationScreen extends Screen {
         int centerX = this.width / 2;
 
         // Header Title
-        extractor.centeredText(this.font, Component.literal("§6MCTrace Display & HDR Calibration§r"), centerX, 12, 0xFFFFFF);
-        extractor.centeredText(this.font, Component.literal("§7Calibrate Black Level, Middle Gray, and Peak White for your monitor§r"), centerX, 24, 0xAAAAAA);
+        extractor.centeredText(this.font, Component.literal("§6MCTrace Display & HDR Calibration§r"), centerX, 10, 0xFFFFFF);
+        extractor.centeredText(this.font, Component.literal("§7Calibrate Scene Brightness, Black Level, Contrast, and Peak White§r"), centerX, 22, 0xAAAAAA);
 
         int cardW = 100;
-        int cardH = 75;
-        int cardY = 40;
+        int cardH = 68;
+        int cardY = 36;
 
         int card1X = centerX - 165;
         int card2X = centerX - 50;
@@ -169,43 +187,43 @@ public class MCTraceCalibrationScreen extends Screen {
         // -------------------------------------------------------------
         drawCardBorder(extractor, card1X, cardY, cardW, cardH, 0xFF3A3A3A);
         extractor.fill(card1X, cardY, card1X + cardW, cardY + cardH, 0xFF000000); // Pure Black
-        extractor.centeredText(this.font, "§7Black Level§r", card1X + cardW / 2, cardY + 5, 0xCCCCCC);
+        extractor.centeredText(this.font, "§7Black Level§r", card1X + cardW / 2, cardY + 4, 0xCCCCCC);
 
         // Inner reactive emblem
         int blackShade = Math.min(255, Math.max(3, (int) (MCTraceConfig.hdrMinLuminance * 2200.0f)));
         int emblemColor = 0xFF000000 | (blackShade << 16) | (blackShade << 8) | blackShade;
-        extractor.fill(card1X + 35, cardY + 22, card1X + 65, cardY + 52, emblemColor);
-        extractor.centeredText(this.font, "MC", card1X + 50, cardY + 33, 0xFF000000);
-        extractor.centeredText(this.font, "§8Barely visible§r", card1X + cardW / 2, cardY + 58, 0x777777);
+        extractor.fill(card1X + 35, cardY + 18, card1X + 65, cardY + 46, emblemColor);
+        extractor.centeredText(this.font, "MC", card1X + 50, cardY + 28, 0xFF000000);
+        extractor.centeredText(this.font, "§8Barely visible§r", card1X + cardW / 2, cardY + 52, 0x777777);
 
         // -------------------------------------------------------------
         // Card 2: Paper White / Middle Gray (Exposure & Contrast)
         // -------------------------------------------------------------
-        int midVal = Math.min(255, Math.max(10, (int) (30 + (MCTraceConfig.hdrPaperWhite / 400.0f) * 160.0f * MCTraceConfig.hdrMiddleGrayContrast)));
+        int midVal = Math.min(255, Math.max(10, (int) (30 + (MCTraceConfig.hdrPaperWhite / 400.0f) * 140.0f * MCTraceConfig.hdrMiddleGrayContrast * (MCTraceConfig.sceneBrightness / 1.15f))));
         int midColor = 0xFF000000 | (midVal << 16) | (midVal << 8) | midVal;
         drawCardBorder(extractor, card2X, cardY, cardW, cardH, 0xFF555555);
         extractor.fill(card2X, cardY, card2X + cardW, cardY + cardH, midColor);
-        extractor.centeredText(this.font, "§fMiddle Gray§r", card2X + cardW / 2, cardY + 5, 0xFFFFFF);
+        extractor.centeredText(this.font, "§fMiddle Gray§r", card2X + cardW / 2, cardY + 4, 0xFFFFFF);
 
         // Sample UI text badge inside middle gray patch
-        extractor.fill(card2X + 15, cardY + 26, card2X + 85, cardY + 48, 0xBB1E1E1E);
-        extractor.centeredText(this.font, "UI Text", card2X + 50, cardY + 33, 0xFFFFFF);
-        extractor.centeredText(this.font, "§fComfortable§r", card2X + cardW / 2, cardY + 58, 0xFFFFFF);
+        extractor.fill(card2X + 15, cardY + 22, card2X + 85, cardY + 44, 0xBB1E1E1E);
+        extractor.centeredText(this.font, "UI Text", card2X + 50, cardY + 29, 0xFFFFFF);
+        extractor.centeredText(this.font, "§fComfortable§r", card2X + cardW / 2, cardY + 52, 0xFFFFFF);
 
         // -------------------------------------------------------------
         // Card 3: Peak White (Highest Light Clipping Point)
         // -------------------------------------------------------------
         drawCardBorder(extractor, card3X, cardY, cardW, cardH, 0xFF999999);
         extractor.fill(card3X, cardY, card3X + cardW, cardY + cardH, 0xFFFFFFFF); // Pure Peak White
-        extractor.centeredText(this.font, "§0Peak White§r", card3X + cardW / 2, cardY + 5, 0x000000);
+        extractor.centeredText(this.font, "§0Peak White§r", card3X + cardW / 2, cardY + 4, 0x000000);
 
         // Highlight emblem that dissolves into white at monitor clipping
         int clipDelta = Math.max(0, Math.min(80, (int) ((2500.0f - MCTraceConfig.hdrPeakLuminance) / 2100.0f * 80.0f)));
         int highlightShade = 255 - clipDelta;
         int highlightColor = 0xFF000000 | (highlightShade << 16) | (highlightShade << 8) | highlightShade;
-        extractor.fill(card3X + 35, cardY + 22, card3X + 65, cardY + 52, highlightColor);
-        extractor.centeredText(this.font, "SUN", card3X + 50, cardY + 33, 0xFFFFFFFF);
-        extractor.centeredText(this.font, "§0Dissolves in white§r", card3X + cardW / 2, cardY + 58, 0x222222);
+        extractor.fill(card3X + 35, cardY + 18, card3X + 65, cardY + 46, highlightColor);
+        extractor.centeredText(this.font, "SUN", card3X + 50, cardY + 28, 0xFFFFFFFF);
+        extractor.centeredText(this.font, "§0Dissolves in white§r", card3X + cardW / 2, cardY + 52, 0x222222);
     }
 
     private void drawCardBorder(GuiGraphicsExtractor extractor, int x, int y, int w, int h, int borderColor) {

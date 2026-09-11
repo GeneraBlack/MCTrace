@@ -99,8 +99,9 @@ public class MCTraceConfig {
     public static float aoRadius = 1.5f;
     public static int maxBounces = 3;
 
-    // True HDR Display Configuration
+    // True HDR & Display Configuration
     public static boolean enableHDR = true;
+    public static float sceneBrightness = 1.15f;    // General scene brightness offset (0.70x - 1.60x)
     public static float hdrPeakLuminance = 1000.0f; // Peak brightness in nits
     public static float hdrPaperWhite = 200.0f;    // Standard UI / paper white brightness in nits
     public static float hdrMinLuminance = 0.000f;   // Black level floor in nits (0.000 for OLED, 0.02-0.08 for LCD)
@@ -124,6 +125,7 @@ public class MCTraceConfig {
         public float aoRadius = 1.5f;
         public int maxBounces = 3;
         public boolean enableHDR = true;
+        public float sceneBrightness = 1.15f;
         public float hdrPeakLuminance = 1000.0f;
         public float hdrPaperWhite = 200.0f;
         public float hdrMinLuminance = 0.000f;
@@ -149,6 +151,7 @@ public class MCTraceConfig {
             data.aoRadius = aoRadius;
             data.maxBounces = maxBounces;
             data.enableHDR = enableHDR;
+            data.sceneBrightness = sceneBrightness;
             data.hdrPeakLuminance = hdrPeakLuminance;
             data.hdrPaperWhite = hdrPaperWhite;
             data.hdrMinLuminance = hdrMinLuminance;
@@ -182,6 +185,7 @@ public class MCTraceConfig {
                     aoRadius = data.aoRadius;
                     maxBounces = data.maxBounces;
                     enableHDR = data.enableHDR;
+                    if (data.sceneBrightness > 0.0f) sceneBrightness = data.sceneBrightness;
                     if (data.hdrPeakLuminance > 0.0f) hdrPeakLuminance = data.hdrPeakLuminance;
                     if (data.hdrPaperWhite > 0.0f) hdrPaperWhite = data.hdrPaperWhite;
                     hdrMinLuminance = Math.max(0.0f, data.hdrMinLuminance);

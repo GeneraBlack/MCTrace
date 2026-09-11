@@ -124,15 +124,15 @@ public abstract class GameRendererMixin {
                     com.mojang.blaze3d.buffers.GpuBuffer buffer = uniforms.get("MCTraceParams");
                     if (buffer != null) {
                         uboBuffer.clear();
-                        // vec4 HdrConfig: minLum, paperWhite, peakLum, contrast
-                        uboBuffer.putFloat(MCTraceConfig.hdrMinLuminance);
+                        // vec4 HdrConfig: sceneBrightness, paperWhite, peakLum, contrast
+                        uboBuffer.putFloat(MCTraceConfig.sceneBrightness);
                         uboBuffer.putFloat(MCTraceConfig.hdrPaperWhite);
                         uboBuffer.putFloat(MCTraceConfig.hdrPeakLuminance);
                         uboBuffer.putFloat(MCTraceConfig.hdrMiddleGrayContrast);
-                        // vec4 LightingConfig: isHdrActive, ssaoMultiplier, timeOfDay, unused
+                        // vec4 LightingConfig: isHdrActive, ssaoMultiplier, minLum, unused
                         uboBuffer.putFloat(MCTraceConfig.isHdrActive ? 1.0f : 0.0f);
                         uboBuffer.putFloat(MCTraceConfig.ssaoIntensity.getMultiplier());
-                        uboBuffer.putFloat(0.5f);
+                        uboBuffer.putFloat(MCTraceConfig.hdrMinLuminance);
                         uboBuffer.putFloat(0.0f);
                         uboBuffer.flip();
 

@@ -153,9 +153,9 @@ public class MCTraceConfigScreen extends Screen {
                                 (btn, val) -> MCTraceConfig.rayQueryQuality = val)
         );
 
-        // 10. Calibrate HDR Display Button
+        // 10. Display & HDR Calibration Button
         this.addRenderableWidget(
-                Button.builder(Component.literal("§6Calibrate HDR Display...§r"), btn -> {
+                Button.builder(Component.literal("§6Display Calibration...§r"), btn -> {
                     if (this.minecraft != null) {
                         this.minecraft.gui.setScreen(new MCTraceCalibrationScreen(this));
                     }
