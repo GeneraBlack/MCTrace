@@ -61,7 +61,33 @@ public abstract class GameRendererMixin {
                 Vector3f sunDir = new Vector3f(0.5f, 0.8f, 0.3f).normalize();
                 CompositePipeline.dispatch(w, h, sunDir, 0.5f);
 
-                if (this.minecraft != null && this.minecraft.getShaderManager() != null) {
+                if (this.minecraft != null && this.minecraft.isGameLoadFinished() && this.minecraft.getShaderManager() != null) {
+                    try {
+                        PostChain worldChain = this.minecraft.getShaderManager().getPostChain(
+                                Identifier.fromNamespaceAndPath("mctrace", "world"),
+                                LevelTargetBundle.MAIN_TARGETS
+                        );
+                        if (worldChain != null) {
+                            mctrace$updateCompositeUniforms(worldChain);
+                            worldChain.process(this.mainRenderTarget, this.resourcePool);
+                        }
+                    } catch (Throwable t) {
+                        if (!loggedActive) {
+                            MCTrace.LOGGER.warn("[MCTrace] World shading pass waiting: {}", t.getMessage());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Inject(method = "render", at = @At("TAIL"))
+    private void mctrace$onRenderTail(DeltaTracker deltaTracker, boolean renderLevel, CallbackInfo ci) {
+        if (this.mainRenderTarget != null && (MCTraceConfig.isHdrActive || MCTraceConfig.enableHDR || MCTraceConfig.enableRayTracing)) {
+            int w = this.mainRenderTarget.width;
+            int h = this.mainRenderTarget.height;
+            if (w > 0 && h > 0) {
+                if (this.minecraft != null && this.minecraft.isGameLoadFinished() && this.minecraft.getShaderManager() != null) {
                     try {
                         PostChain compositeChain = this.minecraft.getShaderManager().getPostChain(
                                 Identifier.fromNamespaceAndPath("mctrace", "composite"),
@@ -72,12 +98,12 @@ public abstract class GameRendererMixin {
                             compositeChain.process(this.mainRenderTarget, this.resourcePool);
                             if (!loggedActive) {
                                 loggedActive = true;
-                                MCTrace.LOGGER.info("[MCTrace] Active Vulkan framebuffer composite pass engaged on mainRenderTarget ({}x{}).", w, h);
+                                MCTrace.LOGGER.info("[MCTrace] Final frame display calibration & HDR tone mapping active ({}x{}).", w, h);
                             }
                         }
                     } catch (Throwable t) {
                         if (!loggedActive) {
-                            MCTrace.LOGGER.warn("[MCTrace] Framebuffer composite pass waiting: {}", t.getMessage());
+                            MCTrace.LOGGER.warn("[MCTrace] Final composite pass waiting: {}", t.getMessage());
                         }
                     }
                 }

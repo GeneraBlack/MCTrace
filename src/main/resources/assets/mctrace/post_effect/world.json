@@ -5,11 +5,16 @@
     "passes": [
         {
             "vertex_shader": "minecraft:core/screenquad",
-            "fragment_shader": "mctrace:post/composite",
+            "fragment_shader": "mctrace:post/world",
             "inputs": [
                 {
                     "sampler_name": "Main",
                     "target": "minecraft:main"
+                },
+                {
+                    "sampler_name": "MainDepth",
+                    "target": "minecraft:main",
+                    "use_depth_buffer": true
                 }
             ],
             "uniforms": {
