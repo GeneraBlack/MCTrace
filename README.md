@@ -1,8 +1,13 @@
 # MCTrace
 
+[![NeoForge](https://img.shields.io/badge/Modloader-NeoForge%2026.2-blue.svg)](https://neoforged.net/)
+[![Minecraft](https://img.shields.io/badge/Minecraft-26.2-green.svg)](https://www.minecraft.net/)
+[![GitHub](https://img.shields.io/badge/GitHub-GeneraBlack%2FMCTrace-181717.svg?logo=github)](https://github.com/GeneraBlack/MCTrace)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 **MCTrace** is an experimental next-generation ray tracing, upscaling, and modern shader engine for **Minecraft Java Edition 26.2**, powered by the native Vulkan rendering backend and **NeoForge**.
 
-Developed by **BlackLightningStudio**.
+Developed by **BlackLightningStudio** ([@GeneraBlack](https://github.com/GeneraBlack)).
 
 ---
 
@@ -62,3 +67,5 @@ Developed by **BlackLightningStudio**.
 ## Documentation & Architecture
 
 * [Project Goals & Technical Architecture](PROJECT_GOALS.md) — Comprehensive breakdown of architectural pillars, Vulkan pipeline details, and implementation phases.
+* [Custom Shader Developer Guide](SHADERS.md) — Documentation for shader creators writing SPIR-V shaders and shader packs.
+* [CurseForge Project Page](CURSEFORGE.md) — Formatted description and release documentation for CurseForge.

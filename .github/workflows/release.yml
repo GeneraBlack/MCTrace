@@ -1,0 +1,94 @@
+name: Release MCTrace
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'Release type (release, beta, alpha)'
+        required: true
+        default: 'release'
+        type: choice
+        options:
+          - release
+          - beta
+          - alpha
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build & Publish Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '25'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build with Gradle
+        run: ./gradlew build --no-daemon
+
+      - name: Verify build artifacts
+        run: |
+          echo "Listing compiled jars in build/libs/:"
+          ls -la build/libs/
+
+      - name: Upload Mod Jar Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mctrace-jars
+          path: build/libs/*.jar
+          if-no-files-found: error
+
+      - name: Check CurseForge Secrets & Variables
+        run: |
+          echo "=== Verifying CurseForge Configuration ==="
+          CF_TOKEN="${{ secrets.CURSEFORGE_TOKEN || secrets.CF_TOKEN || secrets.CURSE_TOKEN || secrets.CURSEFORGE_API_KEY }}"
+          CF_ID="${{ vars.CURSEFORGE_PROJECT_ID || secrets.CURSEFORGE_PROJECT_ID || vars.CF_PROJECT_ID || secrets.CF_PROJECT_ID || vars.PROJECT_ID || secrets.PROJECT_ID || vars.CURSE_PROJECT_ID || secrets.CURSE_PROJECT_ID || vars.CURSEFORGE_PROJEKT_ID || secrets.CURSEFORGE_PROJEKT_ID || vars.PROJEKT_ID || secrets.PROJEKT_ID }}"
+          
+          if [ -n "$CF_TOKEN" ]; then
+            echo "✔ CurseForge Token is detected."
+          else
+            echo "::warning::CurseForge Token is missing! Please configure CURSEFORGE_TOKEN in repository secrets."
+          fi
+
+          if [ -n "$CF_ID" ]; then
+            echo "✔ CurseForge Project ID is detected: $CF_ID"
+          else
+            echo "::warning::CurseForge Project ID is missing! Please configure CURSEFORGE_PROJECT_ID in repository variables or secrets."
+          fi
+
+      - name: Publish to CurseForge & GitHub
+        uses: Kir-Antipov/mc-publish@v3.3
+        with:
+          curseforge-id: ${{ vars.CURSEFORGE_PROJECT_ID || secrets.CURSEFORGE_PROJECT_ID || vars.CF_PROJECT_ID || secrets.CF_PROJECT_ID || vars.PROJECT_ID || secrets.PROJECT_ID || vars.CURSE_PROJECT_ID || secrets.CURSE_PROJECT_ID || vars.CURSEFORGE_PROJEKT_ID || secrets.CURSEFORGE_PROJEKT_ID || vars.PROJEKT_ID || secrets.PROJEKT_ID }}
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN || secrets.CF_TOKEN || secrets.CURSE_TOKEN || secrets.CURSEFORGE_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          files: build/libs/mctrace-*.jar
+          name: MCTrace 1.0.0 (Minecraft 26.2 - NeoForge)
+          version: 1.0.0
+          version-type: ${{ github.event.inputs.version_type || 'release' }}
+          loaders: neoforge
+          game-versions: "26.2"
+          java: "Java 25"
+          changelog-file: CURSEFORGE.md
