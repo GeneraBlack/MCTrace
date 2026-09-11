@@ -66,9 +66,12 @@ void main() {
             // 1. Sunset orange, fire & torch embers (high R, medium G, low B)
             if (color.r > color.g && color.g > color.b && color.r > 0.15) {
                 // Expand towards DCI-P3 red primary (1.2249, -0.2249, 0.0)
-                p3Color.r = color.r * 1.20 - color.g * 0.05;
-                p3Color.g = color.g * 0.94;
-                p3Color.b = color.b * 0.80;
+                float warmDominance = smoothstep(1.0, 1.25, color.r / max(color.g, 0.001));
+                vec3 warmColor;
+                warmColor.r = color.r * 1.20 - color.g * 0.05;
+                warmColor.g = color.g * 0.94;
+                warmColor.b = color.b * 0.80;
+                p3Color = mix(color, warmColor, warmDominance);
             }
             // 2. Neon Sculk & Soul fire cyan (high B and G, low R)
             else if (color.b > color.r && color.g > color.r && (color.b + color.g) > 0.25) {
@@ -77,12 +80,18 @@ void main() {
                 p3Color.g = color.g * 1.16;
                 p3Color.r = color.r * 0.80;
             }
-            // 3. Lush green foliage & grass (dominant G, lower R and B)
-            else if (color.g > color.r && color.g > color.b && color.g > 0.10) {
+            // 3. Lush green foliage & grass (dominant G, distinctly higher than R and B)
+            // Warm-illuminated surfaces have high R and must NOT be shifted towards cold green
+            else if (color.g > color.r * 1.20 && color.g > color.b && color.g > 0.10) {
                 // Expand towards DCI-P3 green primary (-0.0420, 1.0420, -0.0786)
-                p3Color.g = color.g * 1.24 - color.r * 0.04;
-                p3Color.r = color.r * 0.86;
-                p3Color.b = color.b * 0.82;
+                // Smoothly fade foliage expansion based on green dominance over red
+                // so warm-lit transition zones never produce a harsh boundary or radioactive tint
+                float greenDominance = smoothstep(1.20, 1.45, color.g / max(color.r, 0.001));
+                vec3 foliageColor;
+                foliageColor.g = color.g * 1.24 - color.r * 0.04;
+                foliageColor.r = color.r * 0.86;
+                foliageColor.b = color.b * 0.82;
+                p3Color = mix(color, foliageColor, greenDominance);
             }
             // 4. Crimson redstone (dominant R, very low G and B)
             else if (color.r > 0.20 && color.g < color.r * 0.40 && color.b < color.r * 0.40) {

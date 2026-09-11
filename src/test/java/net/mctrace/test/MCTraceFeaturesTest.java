@@ -123,6 +123,9 @@ public class MCTraceFeaturesTest {
 
         PbrMaterial sculk = MaterialRegistry.getMaterialForBlock("minecraft:block/sculk_sensor");
         assertTrue(sculk.getDefaultEmission() >= 0.8f, "Sculk must have emissive glow");
+
+        PbrMaterial lava = MaterialRegistry.getMaterialForBlock("minecraft:block/lava");
+        assertTrue(lava.getDefaultEmission() >= 0.9f, "Lava must have high emission");
     }
 
     @Test

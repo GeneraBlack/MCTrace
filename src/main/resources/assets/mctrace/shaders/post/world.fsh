@@ -71,7 +71,9 @@ vec3 getEmissiveRadiance(vec3 col) {
         return vec3(0.12, 0.88, 0.95) * 2.2;
     }
     // 3. Torch / lantern / campfire / lava (warm amber glow)
-    if (col.r > 0.70 && col.g > 0.40 && col.g < 0.90 && col.b < 0.40) {
+    // Covers bright molten magma, fire, torches, and darker lava crust
+    if ((col.r > 0.70 && col.g > 0.40 && col.g < 0.90 && col.b < 0.40) ||
+        (col.r > 0.55 && col.g > 0.20 && col.b < 0.14 && col.r > col.g * 1.25)) {
         return vec3(1.0, 0.65, 0.22) * 2.0;
     }
     // 4. Sculk / catalyst / sensor (luminescent sculk cyan)
@@ -184,8 +186,8 @@ void main() {
 
             float metallicScale = 0.0;
 
-            // Gold: vibrant warm yellow-orange
-            if (albedo.r > 0.65 && albedo.g > 0.50 && albedo.b < 0.35 && albedo.r >= albedo.g) {
+            // Gold: vibrant warm yellow-orange (exclude self-emissive lava/fire/torches)
+            if (length(getEmissiveRadiance(albedo)) < 0.1 && albedo.r > 0.65 && albedo.g > 0.50 && albedo.b < 0.35 && albedo.r >= albedo.g) {
                 metallic = 0.95;
                 roughness = 0.20;
                 F0 = albedo;
@@ -243,49 +245,55 @@ void main() {
         }
 
         // 4. Coloured Dynamic Block Lighting & Emissive Radiosity
-        if (enableDynamicLight) {
-            vec3 selfEmissive = getEmissiveRadiance(rawColor.rgb);
-            if (length(selfEmissive) > 0.1) {
-                // Fragment itself is an emissive light source: enhance radiance
-                directSunMod += 0.35;
-                pbrSpecular += selfEmissive * 0.45;
-            } else {
-                // Gather dynamic radiosity from nearby emissive blocks across multiple scales
-                // Scale screen-space radius inversely with depth so radiosity has consistent world-space reach (~2 blocks)
-                float baseRadius = clamp(2.0 / max(depth, 1.0), 0.006, 0.05);
+        vec3 selfEmissive = getEmissiveRadiance(rawColor.rgb);
+        bool isEmissive = (length(selfEmissive) > 0.1);
 
-                vec2 radDirs[6] = vec2[](
-                    vec2( 1.000,  0.000),
-                    vec2( 0.500,  0.866),
-                    vec2(-0.500,  0.866),
-                    vec2(-1.000,  0.000),
-                    vec2(-0.500, -0.866),
-                    vec2( 0.500, -0.866)
-                );
+        if (isEmissive) {
+            // Fragment itself is an emissive light source (e.g. lava, fire, torch):
+            // Do not add sun specular or direct sun boost onto emissive surfaces.
+            // Preserves the authentic flowing magma texture and natural contrast of lava blocks.
+            directSunMod = 0.0;
+            pbrSpecular = vec3(0.0);
+            aoFactor = 1.0;
+        } else if (enableDynamicLight) {
+            // Gather dynamic radiosity from nearby emissive blocks across multiple scales
+            // Scale screen-space radius inversely with depth so radiosity has consistent world-space reach (~2 blocks)
+            float baseRadius = clamp(2.0 / max(depth, 1.0), 0.006, 0.05);
 
-                for (int r = 0; r < 6; r++) {
-                    // Inner ring: close glow
-                    vec2 uvInner = texCoord + radDirs[r] * (baseRadius * 0.45);
-                    vec3 colInner = texture(MainSampler, uvInner).rgb;
-                    vec3 emInner = getEmissiveRadiance(colInner);
-                    if (length(emInner) > 0.1) {
-                        float dInner = linearizeDepth(texture(MainDepthSampler, uvInner).r);
-                        float dist = abs(depth - dInner);
-                        if (dist < 1.5) {
-                            dynamicRadiosity += emInner * (1.0 / (1.0 + dist * 2.0)) * 0.16;
-                        }
-                    }
+            // Isotropic sample distribution: correct for screen aspect ratio
+            vec2 aspect = vec2(InSize.y / InSize.x, 1.0);
 
-                    // Outer ring: soft diffuse radiosity
-                    vec2 uvOuter = texCoord + radDirs[(r + 1) % 6] * baseRadius;
-                    vec3 colOuter = texture(MainSampler, uvOuter).rgb;
-                    vec3 emOuter = getEmissiveRadiance(colOuter);
-                    if (length(emOuter) > 0.1) {
-                        float dOuter = linearizeDepth(texture(MainDepthSampler, uvOuter).r);
-                        float dist = abs(depth - dOuter);
-                        if (dist < 2.0) {
-                            dynamicRadiosity += emOuter * (1.0 / (1.0 + dist * 1.8)) * 0.09;
-                        }
+            // Per-pixel rotation using Interleaved Gradient Noise (IGN) to eliminate directional starbursts/petals
+            float ign = fract(52.9829189 * fract(0.06711056 * gl_FragCoord.x + 0.00583715 * gl_FragCoord.y));
+            float rotAngle = ign * (2.0 * PI);
+
+            // Golden-ratio spiral / Poisson disk sampling with smooth distance falloff
+            const float GOLDEN_ANGLE = 2.39996323; // PI * (3.0 - sqrt(5.0))
+            const int SAMPLE_COUNT = 16;
+            const float SAMPLE_WEIGHT = 1.6 / float(SAMPLE_COUNT);
+
+            for (int i = 0; i < SAMPLE_COUNT; i++) {
+                float frac = (float(i) + 0.5) / float(SAMPLE_COUNT);
+                float rFrac = sqrt(frac); // Uniform Poisson disc distribution
+                float angle = float(i) * GOLDEN_ANGLE + rotAngle;
+
+                vec2 offset = vec2(cos(angle), sin(angle)) * (baseRadius * rFrac) * aspect;
+                vec2 sampleUv = texCoord + offset;
+
+                if (sampleUv.x < 0.0 || sampleUv.x > 1.0 || sampleUv.y < 0.0 || sampleUv.y > 1.0) {
+                    continue;
+                }
+
+                vec3 colSample = texture(MainSampler, sampleUv).rgb;
+                vec3 emSample = getEmissiveRadiance(colSample);
+                if (length(emSample) > 0.1) {
+                    float dSample = linearizeDepth(texture(MainDepthSampler, sampleUv).r);
+                    float depthDiff = abs(depth - dSample);
+                    if (depthDiff < 2.0) {
+                        // Smooth depth occlusion and smooth distance falloff
+                        float depthWeight = smoothstep(2.0, 0.0, depthDiff);
+                        float distWeight = smoothstep(1.0, 0.0, rFrac);
+                        dynamicRadiosity += emSample * (depthWeight * distWeight) * SAMPLE_WEIGHT;
                     }
                 }
             }
@@ -293,7 +301,8 @@ void main() {
     }
 
     // 5. Illumination synthesis on 3D geometry
-    vec3 shaded = rawColor.rgb * (aoFactor + directSunMod) + pbrSpecular + dynamicRadiosity;
+    // Multiply diffuse dynamic light by surface albedo so warm amber light realistically warms terrain
+    vec3 shaded = rawColor.rgb * (aoFactor + directSunMod + dynamicRadiosity) + pbrSpecular;
 
     // 6. Screen-Space Water & Glass Reflections (SSR) + Caustics
     if (enableWaterReflections && !isSky) {
