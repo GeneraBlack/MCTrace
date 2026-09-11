@@ -56,22 +56,49 @@ public class DisplayHdrSync {
             pb.redirectErrorStream(true);
             Process proc = pb.start();
 
+            String primaryMatch = null;
+            float primaryPeak = 456.0f;
+            boolean primaryHdr = true;
+
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(proc.getInputStream()))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
-                    line = line.trim();
+                    line = line.trim().toUpperCase();
+                    // Priority 1: Gigabyte GS27U 4K HDR monitor (exact match for user hardware)
                     if (line.contains("GBT2728")) {
                         detectedMonitorName = "Gigabyte GS27U (456 Nits)";
                         detectedPeakLuminance = 456.0f;
                         monitorHdrCapable = true;
                         MCTrace.LOGGER.info("[MCTrace HDR] Detected Gigabyte GS27U 4K monitor. Hardware peak luminance: 456 Nits.");
                         return;
-                    } else if (line.contains("AOC2778")) {
-                        detectedMonitorName = "AOC 27\" Display";
+                    } else if (line.contains("AW3423") || line.contains("AW3225")) {
+                        primaryMatch = "Alienware OLED (1000 Nits)";
+                        primaryPeak = 1000.0f;
+                        primaryHdr = true;
+                    } else if (line.contains("PG27") || line.contains("PG32")) {
+                        primaryMatch = "ASUS ROG Swift HDR (1000 Nits)";
+                        primaryPeak = 1000.0f;
+                        primaryHdr = true;
+                    } else if (line.contains("27GP950") || line.contains("27GN950")) {
+                        primaryMatch = "LG UltraGear 4K HDR (600 Nits)";
+                        primaryPeak = 600.0f;
+                        primaryHdr = true;
+                    } else if (primaryMatch == null && line.contains("AOC2778")) {
+                        primaryMatch = "AOC 27\" Display";
+                        primaryPeak = 400.0f;
+                        primaryHdr = false;
                     }
                 }
             }
             proc.waitFor();
+
+            if (primaryMatch != null) {
+                detectedMonitorName = primaryMatch;
+                detectedPeakLuminance = primaryPeak;
+                monitorHdrCapable = primaryHdr;
+                MCTrace.LOGGER.info("[MCTrace HDR] Detected monitor: {} (Peak: {} Nits, HDR: {})",
+                        detectedMonitorName, detectedPeakLuminance, monitorHdrCapable);
+            }
         } catch (Throwable t) {
             MCTrace.LOGGER.debug("[MCTrace HDR] Windows display WMI probe fallback: {}", t.getMessage());
         }
@@ -88,6 +115,12 @@ public class DisplayHdrSync {
         MCTrace.LOGGER.info("[MCTrace HDR] Synchronized peak luminance to monitor hardware limit: {} Nits ({})",
                 detectedPeakLuminance, detectedMonitorName);
         return detectedPeakLuminance;
+    }
+
+    public static void setDetectedCapabilities(String name, float peakNits, boolean hdrCapable) {
+        detectedMonitorName = name;
+        detectedPeakLuminance = peakNits;
+        monitorHdrCapable = hdrCapable;
     }
 
     public static float getDetectedPeakLuminance() {

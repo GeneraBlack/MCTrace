@@ -50,23 +50,49 @@ void main() {
     // DCI-P3 Wide Color Gamut in scRGB linear:
     // In scRGB linear space, values outside the standard sRGB gamut triangle
     // are represented with coordinates extending beyond [0..1].
-    // If wide color gamut is enabled and color is saturated, expand the gamut.
+    // Maps vibrant world elements (deep sunset oranges, torch embers, neon sculk cyan,
+    // lush green foliage, crimson redstone) into the wider DCI-P3 color gamut while
+    // keeping stone, wood, dirt, and UI completely natural!
     if (wideGamut > 0.0) {
         float cMax = max(color.r, max(color.g, color.b));
         float cMin = min(color.r, min(color.g, color.b));
         float cSat = (cMax - cMin) / max(cMax, 0.001);
-        if (cSat > 0.35) {
-            float weight = smoothstep(0.35, 0.85, cSat) * wideGamut;
-            // Primary expansion matrix towards DCI-P3 in scRGB basis:
-            // DCI-P3 Red in scRGB is (1.2249, -0.0420, -0.0197)
-            // DCI-P3 Green in scRGB is (-0.2249, 1.0420, -0.0786)
-            // DCI-P3 Blue in scRGB is (0.0, 0.0, 1.0983)
-            vec3 expanded = vec3(
-                color.r * 1.08 - color.g * 0.04 - color.b * 0.02,
-               -color.r * 0.03 + color.g * 1.06 - color.b * 0.03,
-               -color.r * 0.01 - color.g * 0.02 + color.b * 1.07
-            );
-            color = mix(color, expanded, weight);
+
+        // Stone, wood, and UI containers have low saturation (cSat < 0.28) and stay 100% natural
+        if (cSat > 0.28) {
+            float gamutWeight = smoothstep(0.28, 0.85, cSat) * wideGamut;
+            vec3 p3Color = color;
+
+            // 1. Sunset orange, fire & torch embers (high R, medium G, low B)
+            if (color.r > color.g && color.g > color.b && color.r > 0.15) {
+                // Expand towards DCI-P3 red primary (1.2249, -0.2249, 0.0)
+                p3Color.r = color.r * 1.20 - color.g * 0.05;
+                p3Color.g = color.g * 0.94;
+                p3Color.b = color.b * 0.80;
+            }
+            // 2. Neon Sculk & Soul fire cyan (high B and G, low R)
+            else if (color.b > color.r && color.g > color.r && (color.b + color.g) > 0.25) {
+                // Expand into spectral DCI-P3 cyan
+                p3Color.b = color.b * 1.22;
+                p3Color.g = color.g * 1.16;
+                p3Color.r = color.r * 0.80;
+            }
+            // 3. Lush green foliage & grass (dominant G, lower R and B)
+            else if (color.g > color.r && color.g > color.b && color.g > 0.10) {
+                // Expand towards DCI-P3 green primary (-0.0420, 1.0420, -0.0786)
+                p3Color.g = color.g * 1.24 - color.r * 0.04;
+                p3Color.r = color.r * 0.86;
+                p3Color.b = color.b * 0.82;
+            }
+            // 4. Crimson redstone (dominant R, very low G and B)
+            else if (color.r > 0.20 && color.g < color.r * 0.40 && color.b < color.r * 0.40) {
+                // Pure spectral DCI-P3 red
+                p3Color.r = color.r * 1.26;
+                p3Color.g = color.g * 0.85;
+                p3Color.b = color.b * 0.85;
+            }
+
+            color = mix(color, p3Color, gamutWeight);
         }
     }
 

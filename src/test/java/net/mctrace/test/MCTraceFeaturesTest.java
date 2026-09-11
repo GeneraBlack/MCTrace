@@ -91,7 +91,7 @@ public class MCTraceFeaturesTest {
         assertEquals(0.0f, deepslate.getDefaultMetallic(), 0.01f, "Deepslate is a dielectric");
         assertTrue(deepslate.getDefaultRoughness() <= 0.20f, "Polished deepslate must gleam with smooth roughness");
 
-        // 3. Matte Materials (Wood & Stone)
+        // 3. Matte Materials (Wood, Stone, Dirt, Leaves)
         PbrMaterial wood = MaterialRegistry.getMaterialForBlock("minecraft:block/oak_planks");
         assertEquals(0.0f, wood.getDefaultMetallic(), 0.01f);
         assertTrue(wood.getDefaultRoughness() >= 0.80f, "Wood must remain matte without plastic sheen");
@@ -99,6 +99,16 @@ public class MCTraceFeaturesTest {
         PbrMaterial stone = MaterialRegistry.getMaterialForBlock("minecraft:block/stone");
         assertEquals(0.0f, stone.getDefaultMetallic(), 0.01f);
         assertTrue(stone.getDefaultRoughness() >= 0.85f, "Stone must remain matte");
+
+        PbrMaterial dirt = MaterialRegistry.getMaterialForBlock("minecraft:block/dirt");
+        assertEquals(0.0f, dirt.getDefaultMetallic(), 0.01f);
+        assertTrue(dirt.getDefaultRoughness() >= 0.90f, "Dirt must have high roughness");
+        assertEquals("block_dirt", dirt.getName());
+
+        PbrMaterial leaves = MaterialRegistry.getMaterialForBlock("minecraft:block/oak_leaves");
+        assertEquals(0.0f, leaves.getDefaultMetallic(), 0.01f);
+        assertTrue(leaves.getDefaultRoughness() >= 0.75f, "Leaves must have matte foliage roughness");
+        assertEquals("block_leaves", leaves.getName());
 
         // 4. Gemstones
         PbrMaterial diamond = MaterialRegistry.getMaterialForBlock("minecraft:block/diamond_block");
@@ -132,34 +142,48 @@ public class MCTraceFeaturesTest {
     @Test
     @DisplayName("Tier 3: Vulkan Acceleration Structures (BLAS & TLAS Generation)")
     void testVulkanAccelerationStructures() {
-        // 1. Create chunk sections
+        // 1. Create and register chunk sections into BlasManager
         SectionPos pos1 = SectionPos.of(0, 4, 0);
         SectionPos pos2 = SectionPos.of(1, 4, 0);
 
         SectionGeometry geom1 = new SectionGeometry(pos1);
         SectionGeometry geom2 = new SectionGeometry(pos2);
 
-        BlasManager.SectionBlas blas1 = new BlasManager.SectionBlas(pos1, geom1);
-        BlasManager.SectionBlas blas2 = new BlasManager.SectionBlas(pos2, geom2);
+        BlasManager.registerSection(pos1, geom1);
+        BlasManager.registerSection(pos2, geom2);
 
-        // Manually register to simulate compiled chunks
-        blas1.setVkAccelerationStructure(0xB1A50001L, 0xA50000000001L);
-        blas2.setVkAccelerationStructure(0xB1A50002L, 0xA50000000002L);
+        assertEquals(2, BlasManager.getBlasCount());
+        assertEquals(2, BlasManager.getDirtyCount());
 
-        assertEquals(0xA50000000001L, blas1.getDeviceAddress());
-        assertFalse(blas1.isDirty(), "BLAS must not be dirty after building handle");
+        // 2. Build BLAS device handles and addresses
+        BlasManager.buildPendingBlases(null);
+        assertEquals(0, BlasManager.getDirtyCount());
 
-        // 2. Build TLAS
+        BlasManager.SectionBlas blas1 = BlasManager.getSectionBlas(pos1.asLong());
+        BlasManager.SectionBlas blas2 = BlasManager.getSectionBlas(pos2.asLong());
+        assertNotNull(blas1);
+        assertNotNull(blas2);
+        assertNotEquals(0L, blas1.getDeviceAddress());
+        assertNotEquals(0L, blas2.getDeviceAddress());
+        assertFalse(blas1.isDirty());
+
+        // 3. Build TLAS directly from active BLASes
         TlasManager.buildTlas(null, null);
-        // Even with no sections in registry initially, destroy resets state
-        assertFalse(TlasManager.isTlasReady());
+        assertTrue(TlasManager.isTlasReady(), "TLAS must be ready when active instances are built");
+        assertEquals(2, TlasManager.getActiveInstanceCount(), "TLAS should contain 2 section instances");
+        assertNotEquals(0L, TlasManager.getTlasDeviceAddress());
 
-        // Test building with instances directly
-        TlasManager.setVkTopLevelAS(0x71A500000001L, 0x71A500000000L);
-        assertTrue(TlasManager.isTlasReady(), "TLAS must be ready when handle and address are assigned");
-        assertEquals(0x71A500000000L, TlasManager.getTlasDeviceAddress());
+        // 4. Test multi-frame dynamic updates (incremental section addition)
+        SectionPos pos3 = SectionPos.of(2, 4, 0);
+        SectionGeometry geom3 = new SectionGeometry(pos3);
+        BlasManager.registerSection(pos3, geom3);
+        assertEquals(1, BlasManager.getDirtyCount());
 
-        // 3. Test SceneInstance 3x4 affine transform matrix
+        TlasManager.buildTlas(null, null);
+        assertEquals(3, BlasManager.getBlasCount());
+        assertEquals(3, TlasManager.getActiveInstanceCount(), "TLAS should dynamically expand to 3 instances");
+
+        // 5. Test SceneInstance 3x4 affine transform matrix
         TlasManager.SceneInstance instance = new TlasManager.SceneInstance(
                 0xA50000000001L, 16.0f, 64.0f, 32.0f, 101, 0xFF
         );

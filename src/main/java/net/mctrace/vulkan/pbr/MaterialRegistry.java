@@ -93,8 +93,10 @@ public class MaterialRegistry {
         if (lower.contains("sculk")) return getMaterial("light_sculk");
         if (lower.contains("redstone")) return getMaterial("light_redstone");
         if (lower.contains("torch") || lower.contains("lantern") || lower.contains("campfire") || lower.contains("lava")) return getMaterial("light_torch");
-        if (lower.contains("wood") || lower.contains("planks") || lower.contains("log")) return getMaterial("block_wood");
-        if (lower.contains("stone") || lower.contains("cobblestone") || lower.contains("dirt") || lower.contains("gravel")) return getMaterial("block_stone");
+        if (lower.contains("leaves") || lower.contains("foliage") || lower.contains("vine")) return getMaterial("block_leaves");
+        if (lower.contains("dirt") || lower.contains("mud") || lower.contains("clay") || lower.contains("grass_block")) return getMaterial("block_dirt");
+        if (lower.contains("wood") || lower.contains("planks") || lower.contains("log") || lower.contains("stem")) return getMaterial("block_wood");
+        if (lower.contains("stone") || lower.contains("cobblestone") || lower.contains("gravel") || lower.contains("sand")) return getMaterial("block_stone");
 
         return MATERIALS.getOrDefault(lower, PbrMaterial.DEFAULT);
     }

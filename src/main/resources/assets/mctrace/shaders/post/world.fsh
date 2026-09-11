@@ -63,24 +63,28 @@ vec3 F_Schlick(float cosTheta, vec3 F0) {
 // Emissive light source color classifier
 vec3 getEmissiveRadiance(vec3 col) {
     // 1. Redstone dust / torch (vivid crimson)
-    if (col.r > 0.70 && col.g < 0.28 && col.b < 0.28) {
+    if (col.r > 0.65 && col.g < 0.32 && col.b < 0.32) {
         return vec3(1.0, 0.12, 0.06) * 2.2;
     }
     // 2. Soul fire / soul lantern (eerie teal cyan)
-    if (col.b > 0.68 && col.g > 0.68 && col.r < 0.42) {
+    if (col.b > 0.60 && col.g > 0.60 && col.r < 0.45) {
         return vec3(0.12, 0.88, 0.95) * 2.2;
     }
     // 3. Torch / lantern / campfire / lava (warm amber glow)
-    if (col.r > 0.75 && col.g > 0.45 && col.g < 0.88 && col.b < 0.38) {
+    if (col.r > 0.70 && col.g > 0.40 && col.g < 0.90 && col.b < 0.40) {
         return vec3(1.0, 0.65, 0.22) * 2.0;
     }
     // 4. Sculk / catalyst / sensor (luminescent sculk cyan)
-    if (col.b > 0.55 && col.g > 0.55 && col.r < 0.32 && (col.g + col.b) > 1.2) {
+    if (col.b > 0.50 && col.g > 0.50 && col.r < 0.35 && (col.g + col.b) > 1.1) {
         return vec3(0.08, 0.94, 0.88) * 2.4;
     }
     // 5. Amethyst cluster (violet glow)
-    if (col.r > 0.52 && col.b > 0.70 && col.g < 0.45) {
+    if (col.r > 0.45 && col.b > 0.60 && col.g < 0.55) {
         return vec3(0.75, 0.35, 1.0) * 1.9;
+    }
+    // 6. Glowstone / shroomlight (warm luminescent gold)
+    if (col.r > 0.72 && col.g > 0.60 && col.b < 0.45 && col.r > col.b * 1.8) {
+        return vec3(1.0, 0.80, 0.30) * 1.8;
     }
     return vec3(0.0);
 }
@@ -178,38 +182,43 @@ void main() {
             float albedoSat = (albedoMax - albedoMin) / max(albedoMax, 0.001);
             float albedoLuma = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
 
+            float metallicScale = 0.0;
+
             // Gold: vibrant warm yellow-orange
-            if (albedo.r > 0.65 && albedo.g > 0.50 && albedo.b < 0.35 && albedo.r > albedo.g) {
+            if (albedo.r > 0.65 && albedo.g > 0.50 && albedo.b < 0.35 && albedo.r >= albedo.g) {
                 metallic = 0.95;
-                roughness = 0.22;
+                roughness = 0.20;
                 F0 = albedo;
+                metallicScale = 0.95;
             }
             // Copper: rich reddish orange
-            else if (albedo.r > 0.60 && albedo.g > 0.30 && albedo.g < 0.52 && albedo.b < 0.35 && albedo.r > albedo.g * 1.30) {
+            else if (albedo.r > 0.60 && albedo.g > 0.30 && albedo.g < 0.55 && albedo.b < 0.35 && albedo.r > albedo.g * 1.25) {
                 metallic = 0.90;
-                roughness = 0.28;
+                roughness = 0.25;
                 F0 = vec3(0.95, 0.64, 0.54);
+                metallicScale = 0.90;
             }
             // Iron: bright neutral grey with low saturation
-            else if (albedoLuma > 0.52 && albedoSat < 0.08 && abs(albedo.r - albedo.b) < 0.06) {
+            else if (albedoLuma > 0.55 && albedoSat < 0.08 && abs(albedo.r - albedo.b) < 0.06) {
                 metallic = 0.85;
-                roughness = 0.30;
+                roughness = 0.28;
                 F0 = vec3(0.78, 0.78, 0.82);
+                metallicScale = 0.85;
             }
             // Polished Deepslate & Blackstone: dark sleek neutral minerals
-            else if (albedoLuma > 0.10 && albedoLuma < 0.35 && albedoSat < 0.12) {
+            else if (albedoLuma >= 0.08 && albedoLuma <= 0.24 && albedoSat < 0.08) {
                 metallic = 0.0;
                 roughness = 0.16; // Polished gleam
                 F0 = vec3(0.06);
             }
             // Smooth Stone & Quartz: bright sleek minerals
-            else if (albedoLuma > 0.72 && albedoSat < 0.10) {
+            else if (albedoLuma > 0.75 && albedoSat < 0.06) {
                 metallic = 0.0;
-                roughness = 0.18;
+                roughness = 0.20;
                 F0 = vec3(0.05);
             }
             // Diamond / Emerald / Amethyst Gems
-            else if (albedoSat > 0.35 && (albedo.b > 0.60 || albedo.g > 0.60)) {
+            else if (albedoSat > 0.40 && (albedo.b > 0.60 || albedo.g > 0.60)) {
                 metallic = 0.05;
                 roughness = 0.10;
                 F0 = vec3(0.08);
@@ -223,6 +232,9 @@ void main() {
             vec3 specNumerator = NDF * G * F;
             float specDenominator = 4.0 * NdotV * NdotL + 0.001;
             pbrSpecular = (specNumerator / specDenominator) * NdotL * shadow * 0.45;
+
+            // Diffuse energy conservation for authentic metallic luster
+            directSunMod *= (1.0 - metallicScale * 0.75);
         } else {
             // Fallback uniform specular
             vec3 halfDir = normalize(sunDir + viewDir);
@@ -236,25 +248,43 @@ void main() {
             if (length(selfEmissive) > 0.1) {
                 // Fragment itself is an emissive light source: enhance radiance
                 directSunMod += 0.35;
-                pbrSpecular += selfEmissive * 0.4;
+                pbrSpecular += selfEmissive * 0.45;
             } else {
-                // Gather dynamic radiosity from nearby emissive blocks
-                float radRadius = 8.0 * texel.x;
-                vec2 radSamples[8] = vec2[](
-                    vec2( 1.0,  0.0), vec2(-1.0,  0.0),
-                    vec2( 0.0,  1.0), vec2( 0.0, -1.0),
-                    vec2( 0.7,  0.7), vec2(-0.7,  0.7),
-                    vec2( 0.7, -0.7), vec2(-0.7, -0.7)
+                // Gather dynamic radiosity from nearby emissive blocks across multiple scales
+                // Scale screen-space radius inversely with depth so radiosity has consistent world-space reach (~2 blocks)
+                float baseRadius = clamp(2.0 / max(depth, 1.0), 0.006, 0.05);
+
+                vec2 radDirs[6] = vec2[](
+                    vec2( 1.000,  0.000),
+                    vec2( 0.500,  0.866),
+                    vec2(-0.500,  0.866),
+                    vec2(-1.000,  0.000),
+                    vec2(-0.500, -0.866),
+                    vec2( 0.500, -0.866)
                 );
-                for (int r = 0; r < 8; r++) {
-                    vec2 sampleUv = texCoord + radSamples[r] * radRadius * 2.5;
-                    vec3 sampleCol = texture(MainSampler, sampleUv).rgb;
-                    vec3 emissive = getEmissiveRadiance(sampleCol);
-                    if (length(emissive) > 0.1) {
-                        float sampleDepth = linearizeDepth(texture(MainDepthSampler, sampleUv).r);
-                        float dist = abs(depth - sampleDepth);
-                        if (dist < 1.2) {
-                            dynamicRadiosity += emissive * (1.0 / (1.0 + dist * 2.0)) * 0.18;
+
+                for (int r = 0; r < 6; r++) {
+                    // Inner ring: close glow
+                    vec2 uvInner = texCoord + radDirs[r] * (baseRadius * 0.45);
+                    vec3 colInner = texture(MainSampler, uvInner).rgb;
+                    vec3 emInner = getEmissiveRadiance(colInner);
+                    if (length(emInner) > 0.1) {
+                        float dInner = linearizeDepth(texture(MainDepthSampler, uvInner).r);
+                        float dist = abs(depth - dInner);
+                        if (dist < 1.5) {
+                            dynamicRadiosity += emInner * (1.0 / (1.0 + dist * 2.0)) * 0.16;
+                        }
+                    }
+
+                    // Outer ring: soft diffuse radiosity
+                    vec2 uvOuter = texCoord + radDirs[(r + 1) % 6] * baseRadius;
+                    vec3 colOuter = texture(MainSampler, uvOuter).rgb;
+                    vec3 emOuter = getEmissiveRadiance(colOuter);
+                    if (length(emOuter) > 0.1) {
+                        float dOuter = linearizeDepth(texture(MainDepthSampler, uvOuter).r);
+                        float dist = abs(depth - dOuter);
+                        if (dist < 2.0) {
+                            dynamicRadiosity += emOuter * (1.0 / (1.0 + dist * 1.8)) * 0.09;
                         }
                     }
                 }
@@ -268,7 +298,7 @@ void main() {
     // 6. Screen-Space Water & Glass Reflections (SSR) + Caustics
     if (enableWaterReflections && !isSky) {
         bool isWater = (rawColor.b > rawColor.r + 0.14 && rawColor.b > 0.22 && normal.y > 0.55);
-        bool isGlass = (rawColor.a < 0.95);
+        bool isGlass = (rawColor.a > 0.10 && rawColor.a < 0.95);
 
         if (isWater || isGlass) {
             // Animated wave normals for water surface
@@ -303,19 +333,23 @@ void main() {
                 }
             }
 
-            // Fresnel view-angle reflections
+            // Fresnel view-angle reflections: only fall back to sky if looking upwards under open sky
             float F0_val = isWater ? 0.02 : 0.04;
             float fresnel = F0_val + (1.0 - F0_val) * pow(clamp(1.0 - max(dot(waveNorm, viewDir), 0.0), 0.0, 1.0), 5.0);
-            shaded = mix(shaded, reflColor, fresnel * max(hitWeight, 0.25));
+            float finalReflWeight = hitWeight;
+            if (hitWeight <= 0.0 && reflDir.y > 0.15 && normal.y > 0.4) {
+                finalReflWeight = 0.20; // Subtle sky reflection only for upward facing open-air surfaces
+            }
+            shaded = mix(shaded, reflColor, fresnel * finalReflWeight);
 
             // Animated underwater light caustics
             if (isWater) {
-                vec2 cUv1 = pos.xz * 1.2 + vec2(time * 0.6, time * 0.4);
-                vec2 cUv2 = pos.xz * 1.8 - vec2(time * 0.4, time * 0.7);
+                vec2 cUv1 = pos.xz * 1.5 + vec2(time * 0.5, time * 0.3);
+                vec2 cUv2 = pos.xz * 2.2 - vec2(time * 0.3, time * 0.6);
                 float c1 = sin(cUv1.x + cos(cUv1.y)) * 0.5 + 0.5;
                 float c2 = sin(cUv2.y + cos(cUv2.x)) * 0.5 + 0.5;
-                float caustics = pow(c1 * c2, 2.0) * 1.6;
-                vec3 causticLight = vec3(0.2, 0.85, 1.0) * caustics * shadow * max(dot(normal, sunDir), 0.0);
+                float caustics = pow(c1 * c2, 2.2) * 1.8;
+                vec3 causticLight = vec3(0.18, 0.85, 1.0) * caustics * shadow * max(dot(normal, sunDir), 0.0);
                 shaded += causticLight * 0.35;
             }
         }
@@ -341,46 +375,16 @@ void main() {
         shaded = max(shaded, vec3(floorVal));
     }
 
-    // 10. DCI-P3 / BT.2020 Wide Color Gamut Expansion:
-    // Maps vibrant world elements (deep sunset oranges, torch embers, neon sculk cyan,
-    // lush green foliage, crimson redstone) into the wider DCI-P3 color gamut while
-    // keeping stone, wood, dirt, and UI completely natural!
+    // 10. SDR Color Vibrancy / Tone Polish
+    // In HDR mode, wide gamut expansion is performed in the 16-bit float composite pass.
+    // In SDR mode, apply subtle saturation polish without clipping highlights.
     float cLuma = dot(shaded, vec3(0.2126, 0.7152, 0.0722));
     float cMax = max(shaded.r, max(shaded.g, shaded.b));
     float cMin = min(shaded.r, min(shaded.g, shaded.b));
     float cSat = (cMax - cMin) / max(cMax, 0.001);
 
-    if (wideGamutStrength > 0.0 && cSat > 0.28) {
-        float gamutWeight = smoothstep(0.28, 0.82, cSat) * wideGamutStrength;
-        vec3 p3Color = shaded;
-
-        // Sunset orange & fire & torch embers (high R, medium G, low B)
-        if (shaded.r > shaded.g && shaded.g > shaded.b && shaded.r > 0.45) {
-            p3Color.r *= 1.18;
-            p3Color.g = mix(p3Color.g, p3Color.g * 0.92, 0.3); // Deeper warm amber/orange
-        }
-        // Neon Sculk & Soul fire cyan (high B and G, low R)
-        else if (shaded.b > shaded.r && shaded.g > shaded.r && (shaded.b + shaded.g) > 0.8) {
-            p3Color.b *= 1.20;
-            p3Color.g *= 1.15;
-            p3Color.r *= 0.85; // Pure spectral neon teal
-        }
-        // Lush green foliage & grass (high G, lower R and B)
-        else if (shaded.g > shaded.r && shaded.g > shaded.b && shaded.g > 0.30) {
-            p3Color.g *= 1.22;
-            p3Color.r = mix(p3Color.r, p3Color.r * 0.88, 0.4); // Deep lush emerald
-        }
-        // Redstone crimson (dominant R, very low G and B)
-        else if (shaded.r > 0.50 && shaded.g < 0.30 && shaded.b < 0.30) {
-            p3Color.r *= 1.25;
-        }
-
-        shaded = mix(shaded, p3Color, gamutWeight);
-    }
-
-    // 11. Color Vibrancy (enhances foliage, sky, and terrain without a gray veil)
-    float vibrance = 1.15; // +15% boost to rich colors
-    shaded = mix(vec3(cLuma), shaded, vibrance + (1.0 - cSat) * 0.10);
+    float vibrance = (isHdr > 0.5) ? 1.05 : 1.15;
+    shaded = mix(vec3(cLuma), shaded, vibrance + (1.0 - cSat) * 0.05);
 
     fragColor = vec4(clamp(shaded, 0.0, 1.0), rawColor.a);
 }

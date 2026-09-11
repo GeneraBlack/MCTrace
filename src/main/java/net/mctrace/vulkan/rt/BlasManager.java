@@ -132,6 +132,18 @@ public class BlasManager {
             return;
         }
 
+        registerSection(pos, geom);
+    }
+
+    /**
+     * Directly registers or updates a chunk section geometry in the BLAS registry.
+     */
+    public static void registerSection(SectionPos pos, SectionGeometry geom) {
+        if (pos == null || geom == null) {
+            return;
+        }
+
+        long node = pos.asLong();
         BLAS_REGISTRY.compute(node, (k, existing) -> {
             if (existing == null) {
                 dirtyCount.incrementAndGet();
@@ -164,8 +176,8 @@ public class BlasManager {
 
                 blas.setVkAccelerationStructure(asHandle, deviceAddress);
                 builtThisPass++;
-                trianglesAccum += (blas.getTotalIndices() / 3);
             }
+            trianglesAccum += (blas.getTotalIndices() / 3);
         }
 
         totalTriangles.set(trianglesAccum);
