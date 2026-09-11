@@ -111,7 +111,7 @@ public abstract class GameRendererMixin {
         }
     }
 
-    private static final java.nio.ByteBuffer uboBuffer = java.nio.ByteBuffer.allocateDirect(112).order(java.nio.ByteOrder.nativeOrder());
+    private static final java.nio.ByteBuffer uboBuffer = java.nio.ByteBuffer.allocateDirect(128).order(java.nio.ByteOrder.nativeOrder());
     private static boolean loggedUniformsOk = false;
 
     private static float[] mctrace$resolveItemLight(net.minecraft.world.item.ItemStack stack) {
@@ -220,6 +220,12 @@ public abstract class GameRendererMixin {
                         uboBuffer.putFloat(MCTraceConfig.motionBlurStrength);
                         uboBuffer.putFloat(enableDof);
                         uboBuffer.putFloat(pomDepth);
+
+                        // 8. vec4 AdvancedConfig: enableFoliageSss, foliageSssStrength, enableRtShadows, enableLabPbrTextures
+                        uboBuffer.putFloat(MCTraceConfig.enableFoliageSss ? 1.0f : 0.0f);
+                        uboBuffer.putFloat(MCTraceConfig.foliageSssStrength);
+                        uboBuffer.putFloat(MCTraceConfig.enableRtShadows ? 1.0f : 0.0f);
+                        uboBuffer.putFloat(MCTraceConfig.enableLabPbrTextures ? 1.0f : 0.0f);
 
                         uboBuffer.flip();
 

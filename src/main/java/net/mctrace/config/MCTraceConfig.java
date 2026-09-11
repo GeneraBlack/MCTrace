@@ -192,6 +192,12 @@ public class MCTraceConfig {
     public static boolean enableBokehDof = false;
     public static float dofFocalDistance = 0.0f;
 
+    // Advanced Lighting & Foliage Realism
+    public static boolean enableFoliageSss = true;          // Backlit Foliage Subsurface Scattering
+    public static float foliageSssStrength = 1.0f;           // Foliage SSS Intensity multiplier
+    public static boolean enableLabPbrTextures = true;      // Auto-hook community resource pack LabPBR textures (_n & _s)
+    public static boolean enableRtShadows = true;           // Hardware TLAS Ray-Traced Direct Shadows & Penumbra
+
     // Advanced Quality & Shading Parameters
     public static QualityPreset currentPreset = QualityPreset.BALANCED;
     public static SsaoIntensity ssaoIntensity = SsaoIntensity.STANDARD;
@@ -220,6 +226,10 @@ public class MCTraceConfig {
                 enableParallaxOcclusion = false;
                 enableMotionBlur = false;
                 enableBokehDof = false;
+                enableFoliageSss = true;
+                foliageSssStrength = 0.7f;
+                enableLabPbrTextures = true;
+                enableRtShadows = false;
             }
             case BALANCED -> {
                 enableRayTracing = true;
@@ -242,6 +252,10 @@ public class MCTraceConfig {
                 pomDepth = 0.04f;
                 enableMotionBlur = false;
                 enableBokehDof = false;
+                enableFoliageSss = true;
+                foliageSssStrength = 1.0f;
+                enableLabPbrTextures = true;
+                enableRtShadows = true;
             }
             case ULTRA_HDR -> {
                 enableRayTracing = true;
@@ -265,6 +279,10 @@ public class MCTraceConfig {
                 enableMotionBlur = false;
                 motionBlurStrength = 0.5f;
                 enableBokehDof = false;
+                enableFoliageSss = true;
+                foliageSssStrength = 1.25f;
+                enableLabPbrTextures = true;
+                enableRtShadows = true;
             }
             case CUSTOM -> {}
         }
@@ -308,6 +326,10 @@ public class MCTraceConfig {
         public float dofFocalDistance = 0.0f;
         public SsaoIntensity ssaoIntensity = SsaoIntensity.STANDARD;
         public RayQueryQuality rayQueryQuality = RayQueryQuality.BALANCED;
+        public boolean enableFoliageSss = true;
+        public float foliageSssStrength = 1.0f;
+        public boolean enableLabPbrTextures = true;
+        public boolean enableRtShadows = true;
     }
 
     public static synchronized void save() {
@@ -352,6 +374,10 @@ public class MCTraceConfig {
             data.dofFocalDistance = dofFocalDistance;
             data.ssaoIntensity = ssaoIntensity;
             data.rayQueryQuality = rayQueryQuality;
+            data.enableFoliageSss = enableFoliageSss;
+            data.foliageSssStrength = foliageSssStrength;
+            data.enableLabPbrTextures = enableLabPbrTextures;
+            data.enableRtShadows = enableRtShadows;
 
             Files.writeString(path, GSON.toJson(data));
             MCTrace.LOGGER.info("[MCTrace] Saved configuration to {}", path);
@@ -405,6 +431,10 @@ public class MCTraceConfig {
                     dofFocalDistance = data.dofFocalDistance;
                     if (data.ssaoIntensity != null) ssaoIntensity = data.ssaoIntensity;
                     if (data.rayQueryQuality != null) rayQueryQuality = data.rayQueryQuality;
+                    enableFoliageSss = data.enableFoliageSss;
+                    if (data.foliageSssStrength > 0.0f) foliageSssStrength = data.foliageSssStrength;
+                    enableLabPbrTextures = data.enableLabPbrTextures;
+                    enableRtShadows = data.enableRtShadows;
                     MCTrace.LOGGER.info("[MCTrace] Loaded configuration from {}", path);
                 }
             } else {

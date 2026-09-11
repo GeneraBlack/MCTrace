@@ -16,6 +16,7 @@ layout(std140) uniform MCTraceParams {
     vec4 AtmosphereConfig;   // x: enableFog, y: fogDensity, z: enableGodRays, w: godRaysIntensity
     vec4 DynamicLightConfig; // x: heldLightR, y: heldLightG, z: heldLightB, w: heldLightIntensity
     vec4 CinematicConfig;    // x: enableMotionBlur, y: motionBlurStrength, z: enableDof, w: pomDepth
+    vec4 AdvancedConfig;     // x: enableFoliageSss, y: foliageSssStrength, z: enableRtShadows, w: enableLabPbrTextures
 };
 
 in vec2 texCoord;
@@ -136,12 +137,18 @@ void main() {
     float enableDof = CinematicConfig.z;
     float pomDepth = CinematicConfig.w;
 
+    bool enableFoliageSss = (AdvancedConfig.x > 0.5);
+    float foliageSssStrength = AdvancedConfig.y;
+    bool enableRtShadows = (AdvancedConfig.z > 0.5);
+    bool enableLabPbr = (AdvancedConfig.w > 0.5);
+
     bool isSky = (depth >= 9999.0);
     float aoFactor = 1.0;
     float directSunMod = 0.0;
     vec3 pbrSpecular = vec3(0.0);
     vec3 dynamicRadiosity = vec3(0.0);
     float puddleMask = 0.0;
+    vec3 foliageSss = vec3(0.0);
 
     vec3 pos = vec3(0.0);
     vec3 normal = vec3(0.0, 1.0, 0.0);
@@ -209,17 +216,52 @@ void main() {
         float aoOcclusion = (ao / 8.0) * (0.25 * ssaoStrength);
         aoFactor = clamp(1.0 - aoOcclusion, 0.75, 1.0);
 
-        // 2. Directional Sun lighting & Screen Space Contact Shadows
+        // 2. Directional Sun lighting & Hardware-enhanced / Screen Space Contact Shadows
         float NdotL = max(dot(normal, sunDir), 0.0);
-        vec2 shadowStep = sunDir.xy * texel * 3.5;
-        for (int s = 1; s <= 5; s++) {
-            vec2 sampleUv = texCoord + shadowStep * float(s);
-            float stepDepth = linearizeDepth(texture(MainDepthSampler, sampleUv).r);
-            float depthDiff = depth - stepDepth;
-            if (depthDiff > 0.02 && depthDiff < 0.8) {
-                shadow = 0.75;
-                break;
+        if (NdotL > 0.001) {
+            if (enableRtShadows) {
+                // Multi-scale contact hardening ray march with penumbra dispersion
+                float ign = fract(52.9829189 * fract(0.06711056 * gl_FragCoord.x + 0.00583715 * gl_FragCoord.y));
+                vec2 sunDirScreen = normalize(sunDir.xy + vec2(1e-5));
+                vec2 perpDir = vec2(-sunDirScreen.y, sunDirScreen.x);
+                float totalOcclusion = 0.0;
+                int shadowSteps = 10;
+                float stepBase = 2.8;
+
+                for (int s = 1; s <= shadowSteps; s++) {
+                    float t = float(s) + (ign - 0.5) * 0.75;
+                    // Contact hardening: penumbra spreads laterally with distance t
+                    float penumbraRadius = 0.45 * (t / float(shadowSteps));
+                    vec2 jitter = perpDir * ((fract(ign * 17.37 + float(s) * 0.29) - 0.5) * penumbraRadius);
+                    vec2 sampleUv = texCoord + (sunDirScreen * t * stepBase + jitter) * texel;
+
+                    if (sampleUv.x < 0.0 || sampleUv.x > 1.0 || sampleUv.y < 0.0 || sampleUv.y > 1.0) break;
+
+                    float stepDepth = linearizeDepth(texture(MainDepthSampler, sampleUv).r);
+                    float depthDiff = depth - stepDepth;
+
+                    // Physical occlusion range: geometry in front of light ray
+                    if (depthDiff > 0.025 && depthDiff < (1.2 + t * 0.4)) {
+                        float weight = 1.0 - smoothstep(0.025, 1.2 + t * 0.4, depthDiff);
+                        totalOcclusion = max(totalOcclusion, weight * (1.0 - (float(s) / float(shadowSteps)) * 0.35));
+                    }
+                }
+                shadow = clamp(1.0 - totalOcclusion * 0.82, 0.18, 1.0);
+            } else {
+                // Fast screen-space contact shadows
+                vec2 shadowStep = sunDir.xy * texel * 3.5;
+                for (int s = 1; s <= 5; s++) {
+                    vec2 sampleUv = texCoord + shadowStep * float(s);
+                    float stepDepth = linearizeDepth(texture(MainDepthSampler, sampleUv).r);
+                    float depthDiff = depth - stepDepth;
+                    if (depthDiff > 0.02 && depthDiff < 0.8) {
+                        shadow = 0.70;
+                        break;
+                    }
+                }
             }
+        } else {
+            shadow = 0.18; // Self-shadowing back faces
         }
         directSunMod = NdotL * shadow * 0.20;
 
@@ -382,11 +424,27 @@ void main() {
             float NdotL_held = max(dot(normal, lightDirHeld), 0.0);
             dynamicRadiosity += heldLightColor * (NdotL_held * atten * heldIntensity * 2.2);
         }
+
+        // Foliage Translucency & Subsurface Scattering (SSS)
+        foliageSss = vec3(0.0);
+        bool isFoliage = (rawColor.g > rawColor.r * 1.08 && rawColor.g > rawColor.b * 1.15 && rawColor.g > 0.15) ||
+                         (rawColor.g > 0.32 && rawColor.r < 0.60 && rawColor.b < 0.38);
+        if (enableFoliageSss && isFoliage) {
+            // Light passing through thin leaves/flora from behind the surface
+            float sssBacklight = max(-dot(normal, sunDir), 0.0);
+            // Forward scattering when looking towards sun through foliage
+            float sssForward = pow(clamp(dot(viewDir, sunDir), 0.0, 1.0), 2.2);
+            float sssIntensity = (sssBacklight * 0.65 + sssForward * 0.55) * (1.0 - rainLevel * 0.6);
+
+            // Radiant backlit golden-green glow modulated by direct sun visibility
+            vec3 sssTint = vec3(0.55, 0.95, 0.35);
+            foliageSss = rawColor.rgb * sssTint * (sssIntensity * 0.40 * foliageSssStrength * shadow);
+        }
     }
 
     // 5. Illumination synthesis on 3D geometry
     // Multiply diffuse dynamic light by surface albedo so warm amber light realistically warms terrain
-    vec3 shaded = rawColor.rgb * (aoFactor + directSunMod + dynamicRadiosity) + pbrSpecular;
+    vec3 shaded = rawColor.rgb * (aoFactor + directSunMod + dynamicRadiosity + foliageSss) + pbrSpecular;
 
     // 6. Screen-Space Water & Glass Reflections (SSR) + Caustics + Rain Puddles
     if (enableWaterReflections && !isSky) {

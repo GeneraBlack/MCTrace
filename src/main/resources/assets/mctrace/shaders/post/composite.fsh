@@ -15,6 +15,7 @@ layout(std140) uniform MCTraceParams {
     vec4 AtmosphereConfig;   // x: enableFog, y: fogDensity, z: enableGodRays, w: godRaysIntensity
     vec4 DynamicLightConfig; // x: heldLightR, y: heldLightG, z: heldLightB, w: heldLightIntensity
     vec4 CinematicConfig;    // x: enableMotionBlur, y: motionBlurStrength, z: enableDof, w: pomDepth
+    vec4 AdvancedConfig;     // x: enableFoliageSss, y: foliageSssStrength, z: enableRtShadows, w: enableLabPbrTextures
 };
 
 in vec2 texCoord;

@@ -25,6 +25,8 @@ public class PbrMaterial {
     private final float defaultRoughness;
     private final float defaultMetallic;
     private final float defaultEmission;
+    private final float porosity;
+    private final float pomDepth;
 
     public PbrMaterial(
             String name,
@@ -35,6 +37,20 @@ public class PbrMaterial {
             float defaultMetallic,
             float defaultEmission
     ) {
+        this(name, albedoIndex, normalIndex, specularIndex, defaultRoughness, defaultMetallic, defaultEmission, 0.0f, 0.0f);
+    }
+
+    public PbrMaterial(
+            String name,
+            int albedoIndex,
+            int normalIndex,
+            int specularIndex,
+            float defaultRoughness,
+            float defaultMetallic,
+            float defaultEmission,
+            float porosity,
+            float pomDepth
+    ) {
         this.name = name;
         this.albedoIndex = albedoIndex;
         this.normalIndex = normalIndex;
@@ -42,6 +58,16 @@ public class PbrMaterial {
         this.defaultRoughness = defaultRoughness;
         this.defaultMetallic = defaultMetallic;
         this.defaultEmission = defaultEmission;
+        this.porosity = porosity;
+        this.pomDepth = pomDepth;
+    }
+
+    public float getPorosity() {
+        return porosity;
+    }
+
+    public float getPomDepth() {
+        return pomDepth;
     }
 
     public String getName() {

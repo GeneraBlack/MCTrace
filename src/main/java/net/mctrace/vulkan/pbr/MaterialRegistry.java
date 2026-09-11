@@ -75,6 +75,25 @@ public class MaterialRegistry {
         if (identifier == null) return PbrMaterial.DEFAULT;
         String lower = identifier.toLowerCase();
 
+        // 1. Check for exact or path-matched custom LabPBR resource pack materials first
+        PbrMaterial direct = MATERIALS.get(lower);
+        if (direct != null) return direct;
+        if (lower.contains(":")) {
+            String pathOnly = lower.substring(lower.indexOf(':') + 1);
+            PbrMaterial pathMat = MATERIALS.get(pathOnly);
+            if (pathMat != null) return pathMat;
+            if (pathOnly.startsWith("block/")) {
+                PbrMaterial shortMat = MATERIALS.get(pathOnly.substring("block/".length()));
+                if (shortMat != null) return shortMat;
+            }
+        } else {
+            PbrMaterial namespaced = MATERIALS.get("minecraft:" + lower);
+            if (namespaced != null) return namespaced;
+            PbrMaterial blockNamespaced = MATERIALS.get("minecraft:block/" + lower);
+            if (blockNamespaced != null) return blockNamespaced;
+        }
+
+        // 2. Procedural heuristic matching for vanilla / unhooked textures
         if (lower.contains("gold")) return getMaterial("metal_gold");
         if (lower.contains("copper")) return getMaterial("metal_copper");
         if (lower.contains("iron")) return getMaterial("metal_iron");
@@ -139,6 +158,10 @@ public class MaterialRegistry {
     public static float getPomDepthForBlock(String identifier) {
         if (identifier == null) return 0.0f;
         String lower = identifier.toLowerCase();
+        PbrMaterial mat = MATERIALS.get(lower);
+        if (mat != null && mat.getPomDepth() > 0.0f) {
+            return mat.getPomDepth();
+        }
         if (lower.contains("brick") || lower.contains("cobblestone") || lower.contains("deepslate_tiles")) {
             return 0.065f;
         }

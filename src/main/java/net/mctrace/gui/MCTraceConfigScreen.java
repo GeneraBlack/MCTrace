@@ -28,16 +28,16 @@ public class MCTraceConfigScreen extends Screen {
     @Override
     protected void init() {
         int centerX = this.width / 2;
-        int startY = Math.max(48, this.height / 7);
+        int startY = Math.max(38, this.height / 10);
         int buttonWidth = 160;
-        int buttonHeight = 19;
-        int spacing = 21;
+        int buttonHeight = 18;
+        int spacing = 20;
 
         int col1X = centerX - buttonWidth - 8;
         int col2X = centerX + 8;
 
         // --- Top: 1-Click Quality Presets ---
-        int presetY = startY - 23;
+        int presetY = startY - 21;
         int pW = 104;
         this.addRenderableWidget(
                 Button.builder(Component.literal(MCTraceConfig.currentPreset == MCTraceConfig.QualityPreset.PERFORMANCE ? "§e[⚡ Performance]§r" : "§7⚡ Performance§r"), btn -> {
@@ -86,14 +86,24 @@ public class MCTraceConfigScreen extends Screen {
                                 })
         );
 
-        // --- Row 1: AMD FSR Mode & HDR Peak Luminance ---
+        // --- Row 1: Hardware RT Shadows & AMD FSR Mode ---
+        this.addRenderableWidget(
+                CycleButton.onOffBuilder(MCTraceConfig.enableRtShadows)
+                        .create(col1X, startY + spacing, buttonWidth, buttonHeight,
+                                Component.literal("Hardware RT Shadows"),
+                                (btn, val) -> {
+                                    MCTraceConfig.enableRtShadows = val;
+                                    MCTraceConfig.currentPreset = MCTraceConfig.QualityPreset.CUSTOM;
+                                })
+        );
+
         this.addRenderableWidget(
                 CycleButton.<MCTraceConfig.FsrQualityMode>builder(
                                 mode -> Component.literal("AMD FSR: " + mode.name()),
                                 MCTraceConfig.fsrQualityMode
                         )
                         .withValues(MCTraceConfig.FsrQualityMode.values())
-                        .create(col1X, startY + spacing, buttonWidth, buttonHeight,
+                        .create(col2X, startY + spacing, buttonWidth, buttonHeight,
                                 Component.literal("AMD FSR Mode"),
                                 (btn, val) -> {
                                     MCTraceConfig.fsrQualityMode = val;
@@ -109,6 +119,17 @@ public class MCTraceConfigScreen extends Screen {
                                 })
         );
 
+        // --- Row 2: Foliage SSS Glow & HDR Peak Luminance ---
+        this.addRenderableWidget(
+                CycleButton.onOffBuilder(MCTraceConfig.enableFoliageSss)
+                        .create(col1X, startY + spacing * 2, buttonWidth, buttonHeight,
+                                Component.literal("Foliage SSS Glow"),
+                                (btn, val) -> {
+                                    MCTraceConfig.enableFoliageSss = val;
+                                    MCTraceConfig.currentPreset = MCTraceConfig.QualityPreset.CUSTOM;
+                                })
+        );
+
         List<Float> peakNitsOptions = List.of(400.0f, 456.0f, 600.0f, 800.0f, 1000.0f, 1200.0f, 1500.0f, 2000.0f);
         this.addRenderableWidget(
                 CycleButton.<Float>builder(
@@ -116,44 +137,18 @@ public class MCTraceConfigScreen extends Screen {
                                 MCTraceConfig.hdrPeakLuminance
                         )
                         .withValues(peakNitsOptions)
-                        .create(col2X, startY + spacing, buttonWidth, buttonHeight,
+                        .create(col2X, startY + spacing * 2, buttonWidth, buttonHeight,
                                 Component.literal("HDR Peak Luminance"),
                                 (btn, val) -> MCTraceConfig.hdrPeakLuminance = val)
         );
 
-        // --- Row 2: Volumetric Fog / God Rays & Rain Wetness ---
+        // --- Row 3: LabPBR Textures (_n/_s) & Parallax 3D Relief (POM) ---
         this.addRenderableWidget(
-                CycleButton.<MCTraceConfig.AtmosphereMode>builder(
-                                mode -> Component.literal("Atmosphere: " + mode.getDisplayName()),
-                                MCTraceConfig.AtmosphereMode.fromConfig(MCTraceConfig.enableGodRays, MCTraceConfig.enableVolumetricFog)
-                        )
-                        .withValues(MCTraceConfig.AtmosphereMode.values())
-                        .create(col1X, startY + spacing * 2, buttonWidth, buttonHeight,
-                                Component.literal("Atmosphere Mode"),
-                                (btn, val) -> {
-                                    MCTraceConfig.enableGodRays = val.hasGodRays();
-                                    MCTraceConfig.enableVolumetricFog = val.hasFog();
-                                    MCTraceConfig.currentPreset = MCTraceConfig.QualityPreset.CUSTOM;
-                                })
-        );
-
-        this.addRenderableWidget(
-                CycleButton.onOffBuilder(MCTraceConfig.enableRainWetness)
-                        .create(col2X, startY + spacing * 2, buttonWidth, buttonHeight,
-                                Component.literal("Rain Wetness & Puddles"),
-                                (btn, val) -> {
-                                    MCTraceConfig.enableRainWetness = val;
-                                    MCTraceConfig.currentPreset = MCTraceConfig.QualityPreset.CUSTOM;
-                                })
-        );
-
-        // --- Row 3: PBR Materials & Parallax Occlusion (POM) ---
-        this.addRenderableWidget(
-                CycleButton.onOffBuilder(MCTraceConfig.enablePbrMaterials)
+                CycleButton.onOffBuilder(MCTraceConfig.enableLabPbrTextures)
                         .create(col1X, startY + spacing * 3, buttonWidth, buttonHeight,
-                                Component.literal("PBR Materials"),
+                                Component.literal("LabPBR Textures"),
                                 (btn, val) -> {
-                                    MCTraceConfig.enablePbrMaterials = val;
+                                    MCTraceConfig.enableLabPbrTextures = val;
                                     MCTraceConfig.currentPreset = MCTraceConfig.QualityPreset.CUSTOM;
                                 })
         );
@@ -168,10 +163,46 @@ public class MCTraceConfigScreen extends Screen {
                                 })
         );
 
-        // --- Row 4: Water SSR & Dynamic Coloured Light ---
+        // --- Row 4: PBR Materials & Atmosphere Mode ---
+        this.addRenderableWidget(
+                CycleButton.onOffBuilder(MCTraceConfig.enablePbrMaterials)
+                        .create(col1X, startY + spacing * 4, buttonWidth, buttonHeight,
+                                Component.literal("PBR Materials"),
+                                (btn, val) -> {
+                                    MCTraceConfig.enablePbrMaterials = val;
+                                    MCTraceConfig.currentPreset = MCTraceConfig.QualityPreset.CUSTOM;
+                                })
+        );
+
+        this.addRenderableWidget(
+                CycleButton.<MCTraceConfig.AtmosphereMode>builder(
+                                mode -> Component.literal("Atmosphere: " + mode.getDisplayName()),
+                                MCTraceConfig.AtmosphereMode.fromConfig(MCTraceConfig.enableGodRays, MCTraceConfig.enableVolumetricFog)
+                        )
+                        .withValues(MCTraceConfig.AtmosphereMode.values())
+                        .create(col2X, startY + spacing * 4, buttonWidth, buttonHeight,
+                                Component.literal("Atmosphere Mode"),
+                                (btn, val) -> {
+                                    MCTraceConfig.enableGodRays = val.hasGodRays();
+                                    MCTraceConfig.enableVolumetricFog = val.hasFog();
+                                    MCTraceConfig.currentPreset = MCTraceConfig.QualityPreset.CUSTOM;
+                                })
+        );
+
+        // --- Row 5: Rain Wetness & Puddles & Water SSR & Caustics ---
+        this.addRenderableWidget(
+                CycleButton.onOffBuilder(MCTraceConfig.enableRainWetness)
+                        .create(col1X, startY + spacing * 5, buttonWidth, buttonHeight,
+                                Component.literal("Rain Wetness & Puddles"),
+                                (btn, val) -> {
+                                    MCTraceConfig.enableRainWetness = val;
+                                    MCTraceConfig.currentPreset = MCTraceConfig.QualityPreset.CUSTOM;
+                                })
+        );
+
         this.addRenderableWidget(
                 CycleButton.onOffBuilder(MCTraceConfig.enableWaterReflections)
-                        .create(col1X, startY + spacing * 4, buttonWidth, buttonHeight,
+                        .create(col2X, startY + spacing * 5, buttonWidth, buttonHeight,
                                 Component.literal("Water SSR & Caustics"),
                                 (btn, val) -> {
                                     MCTraceConfig.enableWaterReflections = val;
@@ -179,9 +210,10 @@ public class MCTraceConfigScreen extends Screen {
                                 })
         );
 
+        // --- Row 6: Coloured Block Light & Held Dynamic Light ---
         this.addRenderableWidget(
                 CycleButton.onOffBuilder(MCTraceConfig.enableDynamicColoredLight)
-                        .create(col2X, startY + spacing * 4, buttonWidth, buttonHeight,
+                        .create(col1X, startY + spacing * 6, buttonWidth, buttonHeight,
                                 Component.literal("Coloured Block Light"),
                                 (btn, val) -> {
                                     MCTraceConfig.enableDynamicColoredLight = val;
@@ -189,10 +221,9 @@ public class MCTraceConfigScreen extends Screen {
                                 })
         );
 
-        // --- Row 5: Hand-Held Dynamic Light & DCI-P3 Wide Gamut ---
         this.addRenderableWidget(
                 CycleButton.onOffBuilder(MCTraceConfig.enableHeldDynamicLights)
-                        .create(col1X, startY + spacing * 5, buttonWidth, buttonHeight,
+                        .create(col2X, startY + spacing * 6, buttonWidth, buttonHeight,
                                 Component.literal("Held Dynamic Light"),
                                 (btn, val) -> {
                                     MCTraceConfig.enableHeldDynamicLights = val;
@@ -200,9 +231,10 @@ public class MCTraceConfigScreen extends Screen {
                                 })
         );
 
+        // --- Row 7: DCI-P3 Wide Gamut & SSAO Intensity ---
         this.addRenderableWidget(
                 CycleButton.onOffBuilder(MCTraceConfig.enableWideGamut)
-                        .create(col2X, startY + spacing * 5, buttonWidth, buttonHeight,
+                        .create(col1X, startY + spacing * 7, buttonWidth, buttonHeight,
                                 Component.literal("DCI-P3 Wide Gamut"),
                                 (btn, val) -> {
                                     MCTraceConfig.enableWideGamut = val;
@@ -210,38 +242,27 @@ public class MCTraceConfigScreen extends Screen {
                                 })
         );
 
-        // --- Row 6: Cinematic Motion Blur & Bokeh Depth of Field ---
-        this.addRenderableWidget(
-                CycleButton.onOffBuilder(MCTraceConfig.enableMotionBlur)
-                        .create(col1X, startY + spacing * 6, buttonWidth, buttonHeight,
-                                Component.literal("Velocity Motion Blur"),
-                                (btn, val) -> {
-                                    MCTraceConfig.enableMotionBlur = val;
-                                    MCTraceConfig.currentPreset = MCTraceConfig.QualityPreset.CUSTOM;
-                                })
-        );
-
-        this.addRenderableWidget(
-                CycleButton.onOffBuilder(MCTraceConfig.enableBokehDof)
-                        .create(col2X, startY + spacing * 6, buttonWidth, buttonHeight,
-                                Component.literal("Cinematic Bokeh DoF"),
-                                (btn, val) -> {
-                                    MCTraceConfig.enableBokehDof = val;
-                                    MCTraceConfig.currentPreset = MCTraceConfig.QualityPreset.CUSTOM;
-                                })
-        );
-
-        // --- Row 7: SSAO Intensity & Display Calibration Button ---
         this.addRenderableWidget(
                 CycleButton.<MCTraceConfig.SsaoIntensity>builder(
                                 intensity -> Component.literal("SSAO: " + intensity.getDisplayName()),
                                 MCTraceConfig.ssaoIntensity
                         )
                         .withValues(MCTraceConfig.SsaoIntensity.values())
-                        .create(col1X, startY + spacing * 7, buttonWidth, buttonHeight,
+                        .create(col2X, startY + spacing * 7, buttonWidth, buttonHeight,
                                 Component.literal("SSAO Intensity"),
                                 (btn, val) -> {
                                     MCTraceConfig.ssaoIntensity = val;
+                                    MCTraceConfig.currentPreset = MCTraceConfig.QualityPreset.CUSTOM;
+                                })
+        );
+
+        // --- Row 8: Velocity Motion Blur & Display Calibration Button ---
+        this.addRenderableWidget(
+                CycleButton.onOffBuilder(MCTraceConfig.enableMotionBlur)
+                        .create(col1X, startY + spacing * 8, buttonWidth, buttonHeight,
+                                Component.literal("Velocity Motion Blur"),
+                                (btn, val) -> {
+                                    MCTraceConfig.enableMotionBlur = val;
                                     MCTraceConfig.currentPreset = MCTraceConfig.QualityPreset.CUSTOM;
                                 })
         );
@@ -251,7 +272,7 @@ public class MCTraceConfigScreen extends Screen {
                     if (this.minecraft != null) {
                         this.minecraft.gui.setScreen(new MCTraceCalibrationScreen(this));
                     }
-                }).bounds(col2X, startY + spacing * 7, buttonWidth, buttonHeight).build()
+                }).bounds(col2X, startY + spacing * 8, buttonWidth, buttonHeight).build()
         );
 
         // --- Bottom: Done Button ---
@@ -261,7 +282,7 @@ public class MCTraceConfigScreen extends Screen {
                     if (this.minecraft != null) {
                         this.minecraft.gui.setScreen(this.lastScreen);
                     }
-                }).bounds(centerX - 100, Math.min(this.height - 24, startY + spacing * 7 + 24), 200, 20).build()
+                }).bounds(centerX - 100, Math.min(this.height - 24, startY + spacing * 8 + 22), 200, 20).build()
         );
     }
 
@@ -269,11 +290,11 @@ public class MCTraceConfigScreen extends Screen {
     public void extractRenderState(GuiGraphicsExtractor extractor, int mouseX, int mouseY, float partialTick) {
         super.extractRenderState(extractor, mouseX, mouseY, partialTick);
         int centerX = this.width / 2;
-        int startY = Math.max(30, this.height / 8);
-        int spacing = 22;
+        int startY = Math.max(38, this.height / 10);
+        int spacing = 20;
 
         extractor.centeredText(this.font, this.title, centerX, 8, 0xFFFFFF);
-        extractor.centeredText(this.font, Component.literal("§7* Set Graphics API to Vulkan for Hardware RT & True 10-bit HDR (requires restart)§r"), centerX, Math.min(this.height - 10, startY + spacing * 7 + 44), 0xAAAAAA);
+        extractor.centeredText(this.font, Component.literal("§7* Set Graphics API to Vulkan for Hardware RT & True 10-bit HDR (requires restart)§r"), centerX, Math.min(this.height - 10, startY + spacing * 8 + 44), 0xAAAAAA);
     }
 
     @Override

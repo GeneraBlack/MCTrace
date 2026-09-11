@@ -4,6 +4,7 @@ import net.mctrace.config.MCTraceConfig;
 import net.mctrace.render.camera.CameraHistory;
 import net.mctrace.render.gbuffer.VelocityPass;
 import net.mctrace.vulkan.hdr.DisplayHdrSync;
+import net.mctrace.vulkan.pbr.LabPbrTextureHook;
 import net.mctrace.vulkan.pbr.MaterialRegistry;
 import net.mctrace.vulkan.pbr.PbrMaterial;
 import net.mctrace.vulkan.rt.BlasManager;
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.awt.image.BufferedImage;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -420,5 +422,108 @@ public class MCTraceFeaturesTest {
         // Reset
         MCTraceConfig.enableMotionBlur = false;
         MCTraceConfig.enableBokehDof = false;
+    }
+
+    // =========================================================================
+    // Category 5: LabPBR Resource Pack Hooking, Foliage SSS & RT Shadows
+    // =========================================================================
+
+    @Test
+    @DisplayName("Category 5: Resource Pack LabPBR Texture Hooking (_n.png & _s.png)")
+    void testResourcePackLabPbrTextureHooking() {
+        LabPbrTextureHook.reset();
+        assertFalse(LabPbrTextureHook.isLabPbrActive());
+
+        // 1. Create mock normal map with height variation in alpha channel
+        BufferedImage normImg = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
+        for (int y = 0; y < 16; y++) {
+            for (int x = 0; x < 16; x++) {
+                // Height relief: alpha varies from 50 (crevice) to 250 (surface)
+                int a = (x + y < 16) ? 50 : 250;
+                int r = 128; // tangent X
+                int g = 128; // tangent Y
+                int b = 255; // tangent Z
+                normImg.setRGB(x, y, (a << 24) | (r << 16) | (g << 8) | b);
+            }
+        }
+
+        // 2. Create mock specular map: Smoothness = 200, Metallic = 240, Porosity = 180, Emission = 60
+        BufferedImage specImg = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
+        int specArgb = (60 << 24) | (200 << 16) | (240 << 8) | 180;
+        for (int y = 0; y < 16; y++) {
+            for (int x = 0; x < 16; x++) {
+                specImg.setRGB(x, y, specArgb);
+            }
+        }
+
+        // 3. Register custom texture pair into MaterialRegistry
+        String blockId = "minecraft:test_chiseled_obsidian";
+        PbrMaterial customMat = LabPbrTextureHook.registerFromImages(blockId, normImg, specImg);
+        assertNotNull(customMat);
+        assertTrue(LabPbrTextureHook.isLabPbrActive());
+        assertTrue(LabPbrTextureHook.getDiscoveredTextureCount() >= 1);
+
+        // Verify decoded physical properties:
+        // Smoothness 200 -> Roughness = 1.0 - 200/255 = 0.215
+        assertEquals(0.215f, customMat.getDefaultRoughness(), 0.05f);
+        // G 240 >= 230 -> Metallic = (240 - 230) / 25 = 0.40
+        assertEquals(0.40f, customMat.getDefaultMetallic(), 0.05f);
+        // B 180 -> Porosity = 180 / 255 = 0.705
+        assertEquals(0.705f, customMat.getPorosity(), 0.05f);
+        // A 60 -> Emission = 60 / 255 = 0.235
+        assertEquals(0.235f, customMat.getDefaultEmission(), 0.05f);
+        // Normal height variance (250 - 50 = 200) -> POM depth > 0.04
+        assertTrue(customMat.getPomDepth() > 0.04f, "Normal height map should produce POM depth");
+
+        // 4. Verify MaterialRegistry lookup prioritizes custom hooked material
+        PbrMaterial resolved = MaterialRegistry.getMaterialForBlock(blockId);
+        assertSame(customMat, resolved, "MaterialRegistry must prioritize custom LabPBR pack materials");
+
+        float pomDepth = MaterialRegistry.getPomDepthForBlock(blockId);
+        assertEquals(customMat.getPomDepth(), pomDepth, 0.001f);
+    }
+
+    @Test
+    @DisplayName("Category 5: Foliage Translucency & Subsurface Scattering (SSS) Configuration")
+    void testFoliageSubsurfaceScatteringConfig() {
+        assertTrue(MCTraceConfig.enableFoliageSss, "Foliage SSS should be enabled by default");
+        assertEquals(1.0f, MCTraceConfig.foliageSssStrength, 0.01f);
+
+        // Presets
+        MCTraceConfig.applyPreset(MCTraceConfig.QualityPreset.PERFORMANCE);
+        assertTrue(MCTraceConfig.enableFoliageSss);
+        assertEquals(0.7f, MCTraceConfig.foliageSssStrength, 0.01f);
+
+        MCTraceConfig.applyPreset(MCTraceConfig.QualityPreset.BALANCED);
+        assertTrue(MCTraceConfig.enableFoliageSss);
+        assertEquals(1.0f, MCTraceConfig.foliageSssStrength, 0.01f);
+
+        MCTraceConfig.applyPreset(MCTraceConfig.QualityPreset.ULTRA_HDR);
+        assertTrue(MCTraceConfig.enableFoliageSss);
+        assertEquals(1.25f, MCTraceConfig.foliageSssStrength, 0.01f);
+
+        // Serialization
+        MCTraceConfig.ConfigData data = new MCTraceConfig.ConfigData();
+        assertTrue(data.enableFoliageSss);
+        assertEquals(1.0f, data.foliageSssStrength, 0.01f);
+    }
+
+    @Test
+    @DisplayName("Category 5: Hardware Ray-Traced Direct Shadows via TLAS Configuration")
+    void testHardwareRayTracedShadowsConfig() {
+        assertTrue(MCTraceConfig.enableRtShadows, "Hardware RT shadows should be enabled by default");
+
+        // Presets: Performance disables heavy RT shadows, Balanced & Ultra enable it
+        MCTraceConfig.applyPreset(MCTraceConfig.QualityPreset.PERFORMANCE);
+        assertFalse(MCTraceConfig.enableRtShadows, "Performance preset uses screen-space contact shadows only");
+
+        MCTraceConfig.applyPreset(MCTraceConfig.QualityPreset.BALANCED);
+        assertTrue(MCTraceConfig.enableRtShadows, "Balanced preset enables full RT shadows");
+
+        MCTraceConfig.applyPreset(MCTraceConfig.QualityPreset.ULTRA_HDR);
+        assertTrue(MCTraceConfig.enableRtShadows, "Ultra HDR preset enables full RT shadows");
+
+        // Reset to Balanced
+        MCTraceConfig.applyPreset(MCTraceConfig.QualityPreset.BALANCED);
     }
 }
