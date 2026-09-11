@@ -292,8 +292,8 @@ public class MCTraceFeaturesTest {
         assertEquals(MCTraceConfig.RayQueryQuality.QUALITY, MCTraceConfig.rayQueryQuality);
         assertEquals(MCTraceConfig.SsaoIntensity.ENHANCED, MCTraceConfig.ssaoIntensity);
         assertEquals(MCTraceConfig.FsrQualityMode.ULTRA_QUALITY, MCTraceConfig.fsrQualityMode);
-        assertTrue(MCTraceConfig.enableMotionBlur);
-        assertTrue(MCTraceConfig.enableBokehDof);
+        assertFalse(MCTraceConfig.enableMotionBlur, "Motion blur is kept off in presets to prevent ghosting");
+        assertFalse(MCTraceConfig.enableBokehDof, "Bokeh DoF is kept off in presets to prevent background starburst duplicates");
         assertTrue(MCTraceConfig.enableParallaxOcclusion);
         assertTrue(MCTraceConfig.pomDepth >= 0.05f);
 

@@ -47,13 +47,10 @@ public abstract class LevelRendererMixin {
                 );
             }
 
-            // 3. Apply subpixel jitter to projection matrix for FSR / TAA
-            JitterManager.applyJitter(cameraRenderState.projectionMatrix);
-
-            // 4. Prepare per-frame TLAS scene instances
+            // 3. Prepare per-frame TLAS scene instances
             TlasManager.prepareFrame(cameraRenderState);
 
-            // 5. Execute dynamic Vulkan Render Graph
+            // 4. Execute dynamic Vulkan Render Graph
             net.mctrace.vulkan.graph.RenderGraph.executeFrame(cameraRenderState);
         }
     }

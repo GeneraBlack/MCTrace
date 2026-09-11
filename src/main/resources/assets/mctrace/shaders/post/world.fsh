@@ -452,30 +452,35 @@ void main() {
 
     // 6b. Atmospheric Crepuscular God Rays & Volumetric Fog
     if (enableGodRays > 0.5 || enableFog > 0.5) {
-        // Sun position projected into screen space
-        vec2 sunScreen = vec2(0.5, 0.5) + (sunDir.xy / max(sunDir.z + 1.0, 0.2)) * 0.5;
-        vec2 rayStep = (sunScreen - texCoord) / 12.0;
-        float godRayAccum = 0.0;
-        vec2 curCoord = texCoord;
-        for (int i = 0; i < 12; i++) {
-            curCoord += rayStep;
-            if (curCoord.x >= 0.0 && curCoord.x <= 1.0 && curCoord.y >= 0.0 && curCoord.y <= 1.0) {
-                float dSample = texture(MainDepthSampler, curCoord).r;
-                if (dSample >= 0.9999 || dSample <= 0.0) {
-                    godRayAccum += 1.0;
+        float cosTheta = dot(viewDir, sunDir);
+        // God rays only appear when looking towards the sun
+        float sunFacing = clamp((cosTheta - 0.20) / 0.40, 0.0, 1.0);
+
+        vec3 godRayColor = vec3(0.0);
+        if (enableGodRays > 0.5 && sunFacing > 0.001) {
+            vec2 sunScreen = vec2(0.5, 0.5) + (sunDir.xy / max(sunDir.z + 1.0, 0.2)) * 0.5;
+            vec2 rayStep = (sunScreen - texCoord) / 12.0;
+            float godRayAccum = 0.0;
+            vec2 curCoord = texCoord;
+            for (int i = 0; i < 12; i++) {
+                curCoord += rayStep;
+                if (curCoord.x >= 0.0 && curCoord.x <= 1.0 && curCoord.y >= 0.0 && curCoord.y <= 1.0) {
+                    float dSample = texture(MainDepthSampler, curCoord).r;
+                    if (dSample >= 0.9999 || dSample <= 0.0) {
+                        godRayAccum += 1.0;
+                    }
                 }
             }
+            godRayAccum /= 12.0;
+            float phase = henyeyGreenstein(cosTheta, 0.72);
+            godRayColor = vec3(1.0, 0.92, 0.78) * (godRayAccum * phase * 16.0 * godRaysIntensity * sunFacing);
         }
-        godRayAccum /= 12.0;
-        float cosTheta = dot(viewDir, sunDir);
-        float phase = henyeyGreenstein(cosTheta, 0.72);
-        vec3 godRayColor = vec3(1.0, 0.92, 0.78) * (godRayAccum * phase * 16.0 * godRaysIntensity);
 
         // Valley / ground atmospheric height fog
         float fogDist = length(pos);
         float heightFactor = clamp((80.0 - pos.y) / 60.0, 0.0, 1.0);
         float fogAmount = (1.0 - exp(-fogDist * 0.015 * fogDensity)) * (0.30 + heightFactor * 0.70);
-        vec3 fogColor = mix(vec3(0.65, 0.78, 0.95), vec3(1.0, 0.88, 0.70), max(dot(viewDir, sunDir), 0.0) * 0.5);
+        vec3 fogColor = mix(vec3(0.65, 0.78, 0.95), vec3(1.0, 0.88, 0.70), max(cosTheta, 0.0) * 0.5);
 
         if (enableFog > 0.5 && !isSky) {
             shaded = mix(shaded, fogColor, fogAmount);
@@ -505,39 +510,42 @@ void main() {
         shaded = max(shaded, vec3(floorVal));
     }
 
-    // 10. Cinematic Bokeh Depth of Field & Velocity Motion Blur
+    // 10. Depth of Field (Smooth bilateral filter, active when aiming/scoping)
     if (enableDof > 0.5 && !isSky) {
         float centerDepth = linearizeDepth(texture(MainDepthSampler, vec2(0.5, 0.5)).r);
-        float coc = clamp(abs(depth - centerDepth) / max(depth, 1.0) * 1.8, 0.0, 1.0);
-        if (coc > 0.05) {
-            vec3 dofAccum = shaded;
-            float dofWeight = 1.0;
-            vec2 bokehOffsets[12] = vec2[](
-                vec2( 1.00,  0.00), vec2( 0.50,  0.86), vec2(-0.50,  0.86),
-                vec2(-1.00,  0.00), vec2(-0.50, -0.86), vec2( 0.50, -0.86),
-                vec2( 0.50,  0.28), vec2( 0.00,  0.57), vec2(-0.50,  0.28),
-                vec2(-0.50, -0.28), vec2( 0.00, -0.57), vec2( 0.50, -0.28)
-            );
-            vec2 blurRadius = texel * (coc * 6.0);
-            for (int b = 0; b < 12; b++) {
-                vec2 sampleCoord = texCoord + bokehOffsets[b] * blurRadius;
-                vec3 sCol = texture(MainSampler, sampleCoord).rgb;
-                float bWeight = 1.0 + dot(sCol, vec3(0.333)) * 0.8;
-                dofAccum += sCol * bWeight;
-                dofWeight += bWeight;
-            }
-            shaded = dofAccum / dofWeight;
-        }
-    }
+        float depthDiff = abs(depth - centerDepth);
+        if (depthDiff > 3.0) {
+            float coc = clamp((depthDiff - 3.0) / max(depth, 1.0), 0.0, 1.0);
+            if (coc > 0.02) {
+                vec3 dofAccum = shaded;
+                float dofWeight = 1.0;
+                vec2 blurRadius = texel * (coc * 2.5);
 
-    if (enableMotionBlur > 0.5) {
-        vec2 velDir = (texCoord - vec2(0.5)) * (0.008 * motionBlurStrength);
-        vec3 mbAccum = shaded;
-        for (int m = 1; m <= 4; m++) {
-            vec2 mbUv = texCoord + velDir * float(m);
-            mbAccum += texture(MainSampler, mbUv).rgb;
+                const vec2 poissonDisc[8] = vec2[](
+                    vec2(-0.326212, -0.405810),
+                    vec2(-0.840144, -0.073580),
+                    vec2(-0.695914,  0.457137),
+                    vec2(-0.203345,  0.620716),
+                    vec2( 0.962340, -0.194983),
+                    vec2( 0.473434, -0.480026),
+                    vec2( 0.519456,  0.767022),
+                    vec2( 0.185461, -0.893124)
+                );
+
+                for (int b = 0; b < 8; b++) {
+                    vec2 sampleCoord = texCoord + poissonDisc[b] * blurRadius;
+                    if (sampleCoord.x >= 0.0 && sampleCoord.x <= 1.0 && sampleCoord.y >= 0.0 && sampleCoord.y <= 1.0) {
+                        float sDepth = linearizeDepth(texture(MainDepthSampler, sampleCoord).r);
+                        if (abs(sDepth - depth) < 3.0) {
+                            vec3 sCol = texture(MainSampler, sampleCoord).rgb * sceneBrightness;
+                            dofAccum += sCol;
+                            dofWeight += 1.0;
+                        }
+                    }
+                }
+                shaded = dofAccum / dofWeight;
+            }
         }
-        shaded = mix(shaded, mbAccum / 5.0, 0.45 * motionBlurStrength);
     }
 
     // 11. SDR Color Vibrancy / Tone Polish

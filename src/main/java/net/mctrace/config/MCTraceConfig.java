@@ -226,9 +226,9 @@ public class MCTraceConfig {
                 enableDynamicColoredLight = true;
                 enableParallaxOcclusion = true;
                 pomDepth = 0.06f;
-                enableMotionBlur = true;
-                motionBlurStrength = 0.6f;
-                enableBokehDof = true;
+                enableMotionBlur = false;
+                motionBlurStrength = 0.5f;
+                enableBokehDof = false;
             }
             case CUSTOM -> {}
         }
