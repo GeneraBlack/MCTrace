@@ -24,6 +24,7 @@ neoForge {
         client {
             client()
             systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+            systemProperty 'neoforge.earlyWindowControl', 'false'
             // Enable Vulkan experimental backend by default in development client
             programArguments.addAll '--renderBackend', 'vulkan'
         }
