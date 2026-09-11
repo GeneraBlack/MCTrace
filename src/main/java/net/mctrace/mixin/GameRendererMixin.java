@@ -62,6 +62,7 @@ public abstract class GameRendererMixin {
                                 LevelTargetBundle.MAIN_TARGETS
                         );
                         if (compositeChain != null) {
+                            mctrace$updateCompositeUniforms(compositeChain);
                             compositeChain.process(this.mainRenderTarget, this.resourcePool);
                             if (!loggedActive) {
                                 loggedActive = true;
@@ -76,6 +77,37 @@ public abstract class GameRendererMixin {
                 }
             }
         }
+    }
+
+    private static final java.nio.ByteBuffer uboBuffer = java.nio.ByteBuffer.allocateDirect(32).order(java.nio.ByteOrder.nativeOrder());
+
+    private void mctrace$updateCompositeUniforms(PostChain chain) {
+        try {
+            java.util.List<net.minecraft.client.renderer.PostPass> passes = ((PostChainAccessor) chain).mctrace$getPasses();
+            if (passes != null && !passes.isEmpty()) {
+                net.minecraft.client.renderer.PostPass pass = passes.get(0);
+                java.util.Map<String, com.mojang.blaze3d.buffers.GpuBuffer> uniforms = ((PostPassAccessor) pass).mctrace$getCustomUniforms();
+                if (uniforms != null) {
+                    com.mojang.blaze3d.buffers.GpuBuffer buffer = uniforms.get("MCTraceParams");
+                    if (buffer != null) {
+                        uboBuffer.clear();
+                        // vec4 HdrConfig: minLum, paperWhite, peakLum, contrast
+                        uboBuffer.putFloat(MCTraceConfig.hdrMinLuminance);
+                        uboBuffer.putFloat(MCTraceConfig.hdrPaperWhite);
+                        uboBuffer.putFloat(MCTraceConfig.hdrPeakLuminance);
+                        uboBuffer.putFloat(MCTraceConfig.hdrMiddleGrayContrast);
+                        // vec4 LightingConfig: isHdrActive, ssaoMultiplier, timeOfDay, unused
+                        uboBuffer.putFloat(MCTraceConfig.isHdrActive ? 1.0f : 0.0f);
+                        uboBuffer.putFloat(MCTraceConfig.ssaoIntensity.getMultiplier());
+                        uboBuffer.putFloat(0.5f);
+                        uboBuffer.putFloat(0.0f);
+                        uboBuffer.flip();
+
+                        com.mojang.blaze3d.systems.RenderSystem.getDevice().createCommandEncoder().writeToBuffer(buffer.slice(), uboBuffer);
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
     }
 }
 

@@ -9,7 +9,9 @@
     "SectionCompilerMixin",
     "VulkanInstanceMixin",
     "VulkanGpuSurfaceMixin",
-    "DebugScreenOverlayMixin"
+    "DebugScreenOverlayMixin",
+    "PostChainAccessor",
+    "PostPassAccessor"
   ],
   "injectors": {
     "defaultRequire": 1

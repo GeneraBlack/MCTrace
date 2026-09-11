@@ -17,6 +17,18 @@
                     "use_depth_buffer": true
                 }
             ],
+            "uniforms": {
+                "MCTraceParams": [
+                    {
+                        "type": "vec4",
+                        "value": [ 0.0, 200.0, 1000.0, 1.0 ]
+                    },
+                    {
+                        "type": "vec4",
+                        "value": [ 1.0, 1.0, 0.0, 0.0 ]
+                    }
+                ]
+            },
             "output": "swap"
         },
         {
