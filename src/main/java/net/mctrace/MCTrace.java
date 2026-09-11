@@ -75,6 +75,7 @@ public class MCTrace {
     private void onRegisterKeyMappings(final RegisterKeyMappingsEvent event) {
         event.register(MCTraceKeybinds.OPEN_CONFIG_KEY);
         event.register(MCTraceKeybinds.TOGGLE_EFFECTS_KEY);
+        event.register(MCTraceKeybinds.RELOAD_SHADERS_KEY);
     }
 
     private void onClientTick(final ClientTickEvent.Post event) {
@@ -92,6 +93,18 @@ public class MCTrace {
             if (mc.player != null) {
                 mc.player.sendOverlayMessage(
                         Component.literal("§6[MCTrace]§r Shading & Effects: " + (MCTraceConfig.enableRayTracing ? "§aEnabled" : "§cDisabled"))
+                );
+            }
+        }
+
+        while (MCTraceKeybinds.RELOAD_SHADERS_KEY.consumeClick()) {
+            long t0 = System.currentTimeMillis();
+            net.mctrace.vulkan.shader.ShaderPackLoader.reloadShaders();
+            long dt = System.currentTimeMillis() - t0;
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.player != null) {
+                mc.player.sendOverlayMessage(
+                        Component.literal("§6[MCTrace]§r Reloaded shaders in " + dt + " ms (" + net.mctrace.vulkan.shader.ShaderPackLoader.getActiveShaderPackName() + ")")
                 );
             }
         }

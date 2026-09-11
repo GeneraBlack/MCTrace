@@ -19,4 +19,11 @@ public class MCTraceKeybinds {
             GLFW.GLFW_KEY_K,
             KeyMapping.Category.MISC
     );
+
+    public static final KeyMapping RELOAD_SHADERS_KEY = new KeyMapping(
+            "key.mctrace.reload_shaders",
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_F4,
+            KeyMapping.Category.MISC
+    );
 }

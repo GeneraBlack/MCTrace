@@ -122,6 +122,11 @@ public class FsrPipeline {
         }
     }
 
+    public static void reload() {
+        initialized = false;
+        initialize();
+    }
+
     public static void destroy() {
         destroyTargets();
         initialized = false;

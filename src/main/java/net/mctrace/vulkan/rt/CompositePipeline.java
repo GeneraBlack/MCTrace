@@ -83,4 +83,15 @@ public class CompositePipeline {
     public static boolean isInitialized() {
         return initialized;
     }
+
+    public static void reload() {
+        initialized = false;
+        initialize();
+    }
+
+    public static void destroy() {
+        initialized = false;
+        compositeSpirv = null;
+        computePipelineHandle = 0L;
+    }
 }

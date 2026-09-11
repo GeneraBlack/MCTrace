@@ -197,6 +197,7 @@ public class MCTraceConfig {
     public static float foliageSssStrength = 1.0f;           // Foliage SSS Intensity multiplier
     public static boolean enableLabPbrTextures = true;      // Auto-hook community resource pack LabPBR textures (_n & _s)
     public static boolean enableRtShadows = true;           // Hardware TLAS Ray-Traced Direct Shadows & Penumbra
+    public static String activeShaderPack = "internal";     // Active shader pack name ("internal" or custom pack in shaderpacks/)
 
     // Advanced Quality & Shading Parameters
     public static QualityPreset currentPreset = QualityPreset.BALANCED;
@@ -330,6 +331,7 @@ public class MCTraceConfig {
         public float foliageSssStrength = 1.0f;
         public boolean enableLabPbrTextures = true;
         public boolean enableRtShadows = true;
+        public String activeShaderPack = "internal";
     }
 
     public static synchronized void save() {
@@ -378,6 +380,7 @@ public class MCTraceConfig {
             data.foliageSssStrength = foliageSssStrength;
             data.enableLabPbrTextures = enableLabPbrTextures;
             data.enableRtShadows = enableRtShadows;
+            data.activeShaderPack = activeShaderPack;
 
             Files.writeString(path, GSON.toJson(data));
             MCTrace.LOGGER.info("[MCTrace] Saved configuration to {}", path);
@@ -435,6 +438,10 @@ public class MCTraceConfig {
                     if (data.foliageSssStrength > 0.0f) foliageSssStrength = data.foliageSssStrength;
                     enableLabPbrTextures = data.enableLabPbrTextures;
                     enableRtShadows = data.enableRtShadows;
+                    if (data.activeShaderPack != null) {
+                        activeShaderPack = data.activeShaderPack;
+                        net.mctrace.vulkan.shader.ShaderPackLoader.setActiveShaderPackName(activeShaderPack);
+                    }
                     MCTrace.LOGGER.info("[MCTrace] Loaded configuration from {}", path);
                 }
             } else {

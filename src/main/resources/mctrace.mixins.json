@@ -11,7 +11,8 @@
     "VulkanGpuSurfaceMixin",
     "DebugScreenOverlayMixin",
     "PostChainAccessor",
-    "PostPassAccessor"
+    "PostPassAccessor",
+    "ShaderManagerMixin"
   ],
   "injectors": {
     "defaultRequire": 1

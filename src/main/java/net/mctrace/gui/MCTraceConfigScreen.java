@@ -275,14 +275,23 @@ public class MCTraceConfigScreen extends Screen {
                 }).bounds(col2X, startY + spacing * 8, buttonWidth, buttonHeight).build()
         );
 
-        // --- Bottom: Done Button ---
+        // --- Bottom: Shader Packs & Done Buttons ---
+        int bottomY = Math.min(this.height - 24, startY + spacing * 8 + 22);
+        this.addRenderableWidget(
+                Button.builder(Component.literal("§eShader Packs...§r"), btn -> {
+                    if (this.minecraft != null) {
+                        this.minecraft.gui.setScreen(new MCTraceShaderPackScreen(this));
+                    }
+                }).bounds(centerX - 125, bottomY, 120, 20).build()
+        );
+
         this.addRenderableWidget(
                 Button.builder(CommonComponents.GUI_DONE, btn -> {
                     MCTraceConfig.save();
                     if (this.minecraft != null) {
                         this.minecraft.gui.setScreen(this.lastScreen);
                     }
-                }).bounds(centerX - 100, Math.min(this.height - 24, startY + spacing * 8 + 22), 200, 20).build()
+                }).bounds(centerX + 5, bottomY, 120, 20).build()
         );
     }
 

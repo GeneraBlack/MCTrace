@@ -110,6 +110,11 @@ public class RayTracingPipeline {
         return initialized;
     }
 
+    public static void reload() {
+        initialized = false;
+        initialize();
+    }
+
     public static void destroy() {
         if (rawIlluminationTarget != null) {
             rawIlluminationTarget.destroyBuffers();

@@ -15,12 +15,19 @@ import net.minecraft.core.SectionPos;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 import org.joml.Vector2f;
+import net.mctrace.vulkan.shader.ShaderPackLoader;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.awt.image.BufferedImage;
+import java.io.FileOutputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -525,5 +532,160 @@ public class MCTraceFeaturesTest {
 
         // Reset to Balanced
         MCTraceConfig.applyPreset(MCTraceConfig.QualityPreset.BALANCED);
+    }
+
+    // =========================================================================
+    // Custom Shader Pack Loader & Hot-Reloading
+    // =========================================================================
+
+    @Test
+    @DisplayName("Custom Shader Pack: Discovery of Folders and .zip Archives")
+    void testShaderPackDiscovery() throws Exception {
+        Path tempPacksDir = Files.createTempDirectory("mctrace_test_packs_disc");
+        try {
+            ShaderPackLoader.setCustomPacksDirectory(tempPacksDir);
+
+            // Verify internal pack is always present
+            List<String> packs = ShaderPackLoader.listAvailablePacks();
+            assertTrue(packs.contains(ShaderPackLoader.INTERNAL_PACK));
+
+            // Create a folder pack
+            Path folderPack = tempPacksDir.resolve("MyVulkanPack");
+            Files.createDirectories(folderPack.resolve("shaders"));
+
+            // Create a .zip pack
+            Path zipPack = tempPacksDir.resolve("CrispShaders.zip");
+            try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(zipPack.toFile()))) {
+                zos.putNextEntry(new ZipEntry("shaders/world.fsh"));
+                zos.write("// Zip shader".getBytes(StandardCharsets.UTF_8));
+                zos.closeEntry();
+            }
+
+            // Also create a non-pack file (should be ignored)
+            Files.writeString(tempPacksDir.resolve("readme.txt"), "Ignore me");
+
+            List<String> updatedPacks = ShaderPackLoader.listAvailablePacks();
+            assertEquals(3, updatedPacks.size(), "Should contain internal + 1 folder + 1 zip");
+            assertTrue(updatedPacks.contains(ShaderPackLoader.INTERNAL_PACK));
+            assertTrue(updatedPacks.contains("MyVulkanPack"));
+            assertTrue(updatedPacks.contains("CrispShaders.zip"));
+            assertFalse(updatedPacks.contains("readme.txt"));
+        } finally {
+            ShaderPackLoader.setCustomPacksDirectory(null);
+            ShaderPackLoader.setActiveShaderPackName(ShaderPackLoader.INTERNAL_PACK);
+        }
+    }
+
+    @Test
+    @DisplayName("Custom Shader Pack: Selective Overriding & Fallback Precedence")
+    void testShaderPackOverridePrecedence() throws Exception {
+        Path tempPacksDir = Files.createTempDirectory("mctrace_test_packs_prec");
+        try {
+            ShaderPackLoader.setCustomPacksDirectory(tempPacksDir);
+
+            Path packFolder = tempPacksDir.resolve("WarmLuminance");
+            Path shadersDir = packFolder.resolve("shaders");
+            Files.createDirectories(shadersDir);
+
+            String customWorldFsh = "#version 330\n// Custom World Shading\nvoid main() {}";
+            Files.writeString(shadersDir.resolve("world.fsh"), customWorldFsh);
+
+            // Initially internal pack: no overrides
+            ShaderPackLoader.setActiveShaderPackName(ShaderPackLoader.INTERNAL_PACK);
+            assertFalse(ShaderPackLoader.hasShaderOverride("world.fsh"));
+            assertFalse(ShaderPackLoader.hasShaderOverride("shaders/post/world.fsh"));
+            assertNull(ShaderPackLoader.getShaderSource("world.fsh"));
+
+            // Activate WarmLuminance pack
+            ShaderPackLoader.setActiveShaderPackName("WarmLuminance");
+            assertEquals("WarmLuminance", ShaderPackLoader.getActiveShaderPackName());
+            assertEquals("WarmLuminance", MCTraceConfig.activeShaderPack);
+
+            // Should override world.fsh under all path variations
+            assertTrue(ShaderPackLoader.hasShaderOverride("world.fsh"));
+            assertTrue(ShaderPackLoader.hasShaderOverride("shaders/world.fsh"));
+            assertTrue(ShaderPackLoader.hasShaderOverride("shaders/post/world.fsh"));
+            assertTrue(ShaderPackLoader.hasShaderOverride("/assets/mctrace/shaders/post/world.fsh"));
+
+            String loadedSource = ShaderPackLoader.getShaderSource("shaders/post/world.fsh");
+            assertNotNull(loadedSource);
+            assertTrue(loadedSource.contains("Custom World Shading"));
+
+            // Selective fallback: composite.fsh was not provided, so returns null / false
+            assertFalse(ShaderPackLoader.hasShaderOverride("composite.fsh"));
+            assertFalse(ShaderPackLoader.hasShaderOverride("shaders/post/composite.fsh"));
+            assertNull(ShaderPackLoader.getShaderSource("composite.fsh"));
+        } finally {
+            ShaderPackLoader.setCustomPacksDirectory(null);
+            ShaderPackLoader.setActiveShaderPackName(ShaderPackLoader.INTERNAL_PACK);
+        }
+    }
+
+    @Test
+    @DisplayName("Custom Shader Pack: In-Memory .zip Archive Stream Reading")
+    void testShaderPackZipReading() throws Exception {
+        Path tempPacksDir = Files.createTempDirectory("mctrace_test_packs_zip");
+        try {
+            ShaderPackLoader.setCustomPacksDirectory(tempPacksDir);
+
+            Path zipPack = tempPacksDir.resolve("VulkanUltra.zip");
+            String compShader = "#version 460\n// Custom Ray Query Compute\nvoid main() {}";
+            String fragShader = "#version 330\n// Custom Composite Presentation\nvoid main() {}";
+
+            try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(zipPack.toFile()))) {
+                zos.putNextEntry(new ZipEntry("shaders/rayquery.comp"));
+                zos.write(compShader.getBytes(StandardCharsets.UTF_8));
+                zos.closeEntry();
+
+                zos.putNextEntry(new ZipEntry("shaders/post/composite.fsh"));
+                zos.write(fragShader.getBytes(StandardCharsets.UTF_8));
+                zos.closeEntry();
+            }
+
+            ShaderPackLoader.setActiveShaderPackName("VulkanUltra.zip");
+
+            assertTrue(ShaderPackLoader.hasShaderOverride("rayquery.comp"));
+            String loadedComp = ShaderPackLoader.getShaderSource("rayquery.comp");
+            assertNotNull(loadedComp);
+            assertTrue(loadedComp.contains("Custom Ray Query Compute"));
+
+            assertTrue(ShaderPackLoader.hasShaderOverride("composite.fsh"));
+            String loadedFrag = ShaderPackLoader.getShaderSource("composite.fsh");
+            assertNotNull(loadedFrag);
+            assertTrue(loadedFrag.contains("Custom Composite Presentation"));
+
+            // world.fsh not in zip
+            assertFalse(ShaderPackLoader.hasShaderOverride("world.fsh"));
+            assertNull(ShaderPackLoader.getShaderSource("world.fsh"));
+        } finally {
+            ShaderPackLoader.setCustomPacksDirectory(null);
+            ShaderPackLoader.setActiveShaderPackName(ShaderPackLoader.INTERNAL_PACK);
+        }
+    }
+
+    @Test
+    @DisplayName("Custom Shader Pack: Config Persistence & Post-Chain Invalidation Hook")
+    void testShaderPackConfigAndInvalidator() {
+        boolean[] invalidatorCalled = new boolean[]{false};
+        ShaderPackLoader.setPostChainInvalidator(() -> invalidatorCalled[0] = true);
+
+        ShaderPackLoader.setActiveShaderPackName("NeonGlowPack");
+        assertEquals("NeonGlowPack", MCTraceConfig.activeShaderPack);
+        assertTrue(invalidatorCalled[0], "Post-chain invalidator must be triggered when switching shader packs");
+
+        // Test ConfigData default and serialization
+        MCTraceConfig.ConfigData data = new MCTraceConfig.ConfigData();
+        assertEquals("internal", data.activeShaderPack);
+        data.activeShaderPack = MCTraceConfig.activeShaderPack;
+        com.google.gson.Gson gson = new com.google.gson.Gson();
+        String json = gson.toJson(data);
+        assertTrue(json.contains("NeonGlowPack"));
+        MCTraceConfig.ConfigData deserialized = gson.fromJson(json, MCTraceConfig.ConfigData.class);
+        assertEquals("NeonGlowPack", deserialized.activeShaderPack);
+
+        // Reset
+        ShaderPackLoader.setActiveShaderPackName(ShaderPackLoader.INTERNAL_PACK);
+        assertEquals(ShaderPackLoader.INTERNAL_PACK, MCTraceConfig.activeShaderPack);
+        ShaderPackLoader.setPostChainInvalidator(null);
     }
 }

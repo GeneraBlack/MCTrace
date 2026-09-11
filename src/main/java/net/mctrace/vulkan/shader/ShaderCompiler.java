@@ -84,9 +84,18 @@ public class ShaderCompiler {
     }
 
     /**
-     * Loads a shader file from the classpath resources and compiles it.
+     * Loads a shader file, prioritizing any active custom shader pack override,
+     * and falling back to classpath resources.
      */
     public static ByteBuffer loadAndCompile(String resourcePath) {
+        // 1. Check active custom shader pack override first
+        String customSource = ShaderPackLoader.getShaderSource(resourcePath);
+        if (customSource != null && !customSource.isBlank()) {
+            MCTrace.LOGGER.info("[MCTrace Shaderc] Compiling custom shaderpack override for: {}", resourcePath);
+            return compileComputeShader(resourcePath, customSource);
+        }
+
+        // 2. Fall back to bundled classpath resource
         try (InputStream is = ShaderCompiler.class.getResourceAsStream(resourcePath)) {
             if (is == null) {
                 MCTrace.LOGGER.error("[MCTrace Shaderc] Resource not found: {}", resourcePath);
