@@ -216,6 +216,11 @@ public class MCTraceCalibrationScreen extends Screen {
     }
 
     @Override
+    public boolean isPauseScreen() {
+        return false;
+    }
+
+    @Override
     public void onClose() {
         MCTraceConfig.hdrCalibrated = true;
         MCTraceConfig.save();

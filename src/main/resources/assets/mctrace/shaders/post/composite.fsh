@@ -112,31 +112,44 @@ void main() {
     // rawColor already contains Minecraft's lit world (sunlight, torches in caves, block light).
     // Modulate by SSAO contact darkening, add warm directional sunlight boost in sunlit areas,
     // and add specular glints.
-    float directSunMod = NdotL * shadow * 0.20;
+    float directSunMod = NdotL * shadow * 0.25;
     vec3 shaded = rawColor.rgb * (aoFactor + directSunMod) + vec3(specular);
 
     // 5. Dynamic Display Calibration: Contrast & Black Level
-    // If True HDR is active, apply a subtle contrast compensation for Windows DWM
+    // Filmic S-curve contrast centered on middle gray (0.45 in sRGB space)
     float effectiveContrast = contrast;
     if (isHdr > 0.5) {
-        effectiveContrast *= 1.15;
+        effectiveContrast *= 1.15; // Natural compensation for HDR DWM tone curve
     }
 
     vec3 contrasted = shaded;
     if (abs(effectiveContrast - 1.0) > 0.01) {
-        contrasted = pow(max(shaded, vec3(0.0)), vec3(effectiveContrast));
+        contrasted = pow(max(shaded / 0.45, vec3(0.0)), vec3(effectiveContrast)) * 0.45;
     }
 
-    // Black level floor calibration (prevents pitch-black crushing in caves)
+    // Black level floor calibration
     if (minLum > 0.0) {
-        contrasted = max(contrasted, vec3(minLum * 0.2));
+        contrasted = max(contrasted, vec3(minLum * 0.3));
     }
 
-    // In True HDR, expand specular highlights into HDR headroom
-    if (isHdr > 0.5 && specular > 0.01) {
-        float hdrBoost = (peakLum / paperWhite) * 0.20;
-        contrasted += vec3(specular * hdrBoost);
+    // 6. Color Vibrancy & De-hazing (replaces milky/gray veil with rich, lush colors)
+    vec3 dehazed = max(contrasted - vec3(0.02), vec3(0.0)) / 0.98;
+    float luma = dot(dehazed, vec3(0.2126, 0.7152, 0.0722));
+    float maxC = max(dehazed.r, max(dehazed.g, dehazed.b));
+    float minC = min(dehazed.r, min(dehazed.g, dehazed.b));
+    float sat = (maxC - minC) / max(maxC, 0.001);
+    float vibrance = 1.30; // 30% boost to color richness
+    vec3 vibrant = mix(vec3(luma), dehazed, vibrance + (1.0 - sat) * 0.20);
+
+    // 7. Dynamic Exposure scaling derived from Paper White (target 200 Nits = 1.0x baseline)
+    float exposure = paperWhite / 200.0;
+    vec3 finalWorld = vibrant * exposure;
+
+    // 8. Specular highlight expansion into HDR display headroom
+    if (specular > 0.005) {
+        float hdrHeadroom = max(1.0, peakLum / max(80.0, paperWhite));
+        finalWorld += vec3(specular * 0.40 * hdrHeadroom);
     }
 
-    fragColor = vec4(clamp(contrasted, 0.0, 1.0), rawColor.a);
+    fragColor = vec4(clamp(finalWorld, 0.0, 1.0), rawColor.a);
 }

@@ -80,6 +80,7 @@ public abstract class GameRendererMixin {
     }
 
     private static final java.nio.ByteBuffer uboBuffer = java.nio.ByteBuffer.allocateDirect(32).order(java.nio.ByteOrder.nativeOrder());
+    private static boolean loggedUniformsOk = false;
 
     private void mctrace$updateCompositeUniforms(PostChain chain) {
         try {
@@ -104,10 +105,22 @@ public abstract class GameRendererMixin {
                         uboBuffer.flip();
 
                         com.mojang.blaze3d.systems.RenderSystem.getDevice().createCommandEncoder().writeToBuffer(buffer.slice(), uboBuffer);
+                        if (!loggedUniformsOk) {
+                            loggedUniformsOk = true;
+                            MCTrace.LOGGER.info("[MCTrace] Real-time display calibration uniform updates active on GPU.");
+                        }
+                    } else if (!loggedUniformsOk) {
+                        loggedUniformsOk = true;
+                        MCTrace.LOGGER.warn("[MCTrace] MCTraceParams uniform buffer not found in composite pass uniforms: {}", uniforms.keySet());
                     }
                 }
             }
-        } catch (Throwable ignored) {}
+        } catch (Throwable t) {
+            if (!loggedUniformsOk) {
+                loggedUniformsOk = true;
+                MCTrace.LOGGER.warn("[MCTrace] Failed to update composite uniforms: {}", t.getMessage());
+            }
+        }
     }
 }
 
