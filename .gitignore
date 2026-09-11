@@ -1,0 +1,20 @@
+# Gradle
+.gradle/
+build/
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+*.ipr
+*.iws
+
+# Minecraft NeoForge runs
+run/
+logs/
+crash-reports/
+
+# OS Specific
+Thumbs.db
+Desktop.ini
+.DS_Store
