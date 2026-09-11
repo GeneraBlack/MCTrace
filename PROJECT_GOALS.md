@@ -104,3 +104,19 @@ The goal of **MCTrace** is to leverage this architectural shift to build a high-
 | **Phase 4** | **Ray Traced Lighting & Denoising** | First ray query compute shader (hard shadows / AO); SVGF temporal/spatial denoising filter. |
 | **Phase 5** | **Upscaling Integration (FSR)** | FidelityFX FSR 2/3 compute pass integration; resolution scaling UI controls. |
 | **Phase 6** | **Shader Pipeline Expansion** | Bindless PBR material support; dynamic render graph; Slang/SPIR-V shader pack loading. |
+
+---
+
+## 5. Engine Boot Lifecycle & First-Time Launch Sequence
+
+### NeoForge Early Window & Vulkan Architecture
+NeoForge FML defaults to an early OpenGL loading window (`earlyWindowControl = true`). Minecraft 26.2's native Vulkan backend requires a GLFW window initialized with `GLFW_NO_API` (otherwise causing GLFW error 65540). 
+
+MCTrace features a self-unclaiming `MCTraceGraphicsBootstrapper` SPI service to automatically synchronize `config/fml.toml` without hiding the mod from NeoForge's `InDevFolderLocator` / `ModsFolderLocator`.
+
+### Worst-Case Startup Lifecycle (Up to 3 Starts)
+In the worst-case scenario when a user transitions from a default OpenGL Minecraft installation to Vulkan:
+1. **Launch 1 (OpenGL Baseline):** The game boots in OpenGL. MCTrace automatically writes `earlyWindowControl = false` into `config/fml.toml`. The user switches graphics backend to Vulkan in Video Settings.
+2. **Launch 2 (Vulkan Handshake):** Minecraft switches to Vulkan with no early OpenGL window interference. Initial SPIR-V shaders compile and device physical features (`VK_KHR_ray_query`) are negotiated.
+3. **Launch 3 (Full Steady-State Operation):** G-buffers, BVH acceleration structures, SVGF denoising, and FSR temporal pipelines are fully linked and persistent across sessions.
+
