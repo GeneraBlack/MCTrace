@@ -26,6 +26,10 @@ public class VulkanDeviceInterceptor {
     public static final String VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME    = "VK_EXT_descriptor_indexing";
     public static final String VK_EXT_MESH_SHADER_EXTENSION_NAME            = "VK_EXT_mesh_shader";
 
+    // True HDR Extensions
+    public static final String VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME   = "VK_EXT_swapchain_colorspace";
+    public static final String VK_EXT_HDR_METADATA_EXTENSION_NAME            = "VK_EXT_hdr_metadata";
+
     private static final Set<String> REQUESTED_EXTENSIONS = Set.of(
             VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
             VK_KHR_RAY_QUERY_EXTENSION_NAME,
@@ -34,7 +38,8 @@ public class VulkanDeviceInterceptor {
             VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
             VK_KHR_SPIRV_1_4_EXTENSION_NAME,
             VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME,
-            VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME
+            VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
+            VK_EXT_HDR_METADATA_EXTENSION_NAME
     );
 
     /**
@@ -80,6 +85,11 @@ public class VulkanDeviceInterceptor {
         if (supportedDeviceExtensions.contains(VK_EXT_MESH_SHADER_EXTENSION_NAME)) {
             augmented.add(VK_EXT_MESH_SHADER_EXTENSION_NAME);
             VulkanCapabilities.setMeshShaderSupported(true);
+        }
+
+        if (supportedDeviceExtensions.contains(VK_EXT_HDR_METADATA_EXTENSION_NAME)) {
+            augmented.add(VK_EXT_HDR_METADATA_EXTENSION_NAME);
+            MCTrace.LOGGER.info("[MCTrace HDR] GPU supports VK_EXT_hdr_metadata extension.");
         }
 
         VulkanCapabilities.setVulkanInitialized(true);

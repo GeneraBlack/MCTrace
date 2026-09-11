@@ -37,4 +37,10 @@ public class MCTraceConfig {
     public static int aoSampleCount = 2;
     public static float aoRadius = 1.5f;
     public static int maxBounces = 3;
+
+    // True HDR Display Configuration
+    public static boolean enableHDR = true;
+    public static float hdrPeakLuminance = 1000.0f; // Peak brightness in nits
+    public static float hdrPaperWhite = 200.0f;    // Standard UI / paper white brightness in nits
+    public static boolean isHdrActive = false;     // True when swapchain is running in HDR mode
 }

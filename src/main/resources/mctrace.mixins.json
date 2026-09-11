@@ -6,7 +6,9 @@
   "client": [
     "GameRendererMixin",
     "LevelRendererMixin",
-    "SectionCompilerMixin"
+    "SectionCompilerMixin",
+    "VulkanInstanceMixin",
+    "VulkanGpuSurfaceMixin"
   ],
   "injectors": {
     "defaultRequire": 1

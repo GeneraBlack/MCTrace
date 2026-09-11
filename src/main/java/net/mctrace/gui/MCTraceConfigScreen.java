@@ -88,7 +88,28 @@ public class MCTraceConfigScreen extends Screen {
                                 (btn, val) -> MCTraceConfig.enableDenoiser = val)
         );
 
-        // 5. Done Button
+        // 5. True HDR Display Toggle
+        this.addRenderableWidget(
+                CycleButton.onOffBuilder(MCTraceConfig.enableHDR)
+                        .create(centerX - buttonWidth / 2, startY + spacing * 4, buttonWidth, buttonHeight,
+                                Component.literal("True HDR Display"),
+                                (btn, val) -> MCTraceConfig.enableHDR = val)
+        );
+
+        // 6. HDR Peak Luminance
+        List<Float> peakNitsOptions = List.of(400.0f, 600.0f, 800.0f, 1000.0f, 1200.0f, 1500.0f, 2000.0f);
+        this.addRenderableWidget(
+                CycleButton.<Float>builder(
+                                nits -> Component.literal("HDR Peak: " + nits.intValue() + " Nits"),
+                                MCTraceConfig.hdrPeakLuminance
+                        )
+                        .withValues(peakNitsOptions)
+                        .create(centerX - buttonWidth / 2, startY + spacing * 5, buttonWidth, buttonHeight,
+                                Component.literal("HDR Peak Luminance"),
+                                (btn, val) -> MCTraceConfig.hdrPeakLuminance = val)
+        );
+
+        // 7. Done Button
         this.addRenderableWidget(
                 Button.builder(CommonComponents.GUI_DONE, btn -> {
                     if (this.minecraft != null) {
