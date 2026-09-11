@@ -111,7 +111,7 @@ public abstract class GameRendererMixin {
         }
     }
 
-    private static final java.nio.ByteBuffer uboBuffer = java.nio.ByteBuffer.allocateDirect(32).order(java.nio.ByteOrder.nativeOrder());
+    private static final java.nio.ByteBuffer uboBuffer = java.nio.ByteBuffer.allocateDirect(64).order(java.nio.ByteOrder.nativeOrder());
     private static boolean loggedUniformsOk = false;
 
     private void mctrace$updateCompositeUniforms(PostChain chain) {
@@ -129,10 +129,21 @@ public abstract class GameRendererMixin {
                         uboBuffer.putFloat(MCTraceConfig.hdrPaperWhite);
                         uboBuffer.putFloat(MCTraceConfig.hdrPeakLuminance);
                         uboBuffer.putFloat(MCTraceConfig.hdrMiddleGrayContrast);
-                        // vec4 LightingConfig: isHdrActive, ssaoMultiplier, minLum, unused
+                        // vec4 LightingConfig: isHdrActive, ssaoMultiplier, minLum, wideGamutStrength
                         uboBuffer.putFloat(MCTraceConfig.isHdrActive ? 1.0f : 0.0f);
                         uboBuffer.putFloat(MCTraceConfig.ssaoIntensity.getMultiplier());
                         uboBuffer.putFloat(MCTraceConfig.hdrMinLuminance);
+                        uboBuffer.putFloat(MCTraceConfig.enableWideGamut ? MCTraceConfig.wideGamutStrength : 0.0f);
+                        // vec4 MaterialConfig: enablePbr, enableWaterReflections, enableDynamicColoredLight, time
+                        uboBuffer.putFloat(MCTraceConfig.enablePbrMaterials ? 1.0f : 0.0f);
+                        uboBuffer.putFloat(MCTraceConfig.enableWaterReflections ? 1.0f : 0.0f);
+                        uboBuffer.putFloat(MCTraceConfig.enableDynamicColoredLight ? 1.0f : 0.0f);
+                        float time = (float) ((System.currentTimeMillis() % 1000000L) / 1000.0);
+                        uboBuffer.putFloat(time);
+                        // vec4 ExtraConfig
+                        uboBuffer.putFloat(0.0f);
+                        uboBuffer.putFloat(0.0f);
+                        uboBuffer.putFloat(0.0f);
                         uboBuffer.putFloat(0.0f);
                         uboBuffer.flip();
 
