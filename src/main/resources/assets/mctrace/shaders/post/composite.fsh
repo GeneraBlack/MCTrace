@@ -97,13 +97,16 @@ void main() {
     vec3 diffuse = albedo.rgb * (ambientColor * aoFactor + sunLightColor * (NdotL * 0.9 + 0.1) * shadow);
     vec3 combined = diffuse + vec3(specular);
 
-    // Filmic tone mapping (Reinhard-Jodie)
+    // Filmic tone mapping (Adaptive Reinhard-Jodie with specular HDR headroom)
     float luma = dot(combined, vec3(0.2126, 0.7152, 0.0722));
     vec3 tonemapped = combined / (1.0 + combined);
     vec3 finalRgb = mix(combined / (1.0 + luma), tonemapped, tonemapped);
 
-    // Linear to sRGB gamma correction
-    finalRgb = pow(clamp(finalRgb, 0.0, 1.0), vec3(1.0 / 2.2));
+    // Add specular highlight punch for true HDR display headroom
+    finalRgb += vec3(specular * 0.4);
+
+    // Linear to display gamma curve (preserving HDR highlights > 1.0 for scRGB)
+    finalRgb = pow(max(finalRgb, vec3(0.0)), vec3(1.0 / 2.2));
 
     fragColor = vec4(finalRgb, albedo.a);
 }

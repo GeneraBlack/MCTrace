@@ -1,5 +1,8 @@
 {
     "key.category.mctrace": "MCTrace",
     "key.mctrace.settings": "Open MCTrace Settings",
-    "key.mctrace.toggle_effects": "Toggle MCTrace Shading Effects"
+    "key.mctrace.toggle_effects": "Toggle MCTrace Shading Effects",
+    "mctrace.calibration.title": "MCTrace Display & HDR Calibration",
+    "mctrace.calibration.subtitle": "Calibrate Black Level, Middle Gray, and Peak White for your monitor",
+    "mctrace.calibration.button": "Calibrate HDR Display..."
 }

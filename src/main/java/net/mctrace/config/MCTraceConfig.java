@@ -103,6 +103,9 @@ public class MCTraceConfig {
     public static boolean enableHDR = true;
     public static float hdrPeakLuminance = 1000.0f; // Peak brightness in nits
     public static float hdrPaperWhite = 200.0f;    // Standard UI / paper white brightness in nits
+    public static float hdrMinLuminance = 0.000f;   // Black level floor in nits (0.000 for OLED, 0.02-0.08 for LCD)
+    public static float hdrMiddleGrayContrast = 1.0f; // Midtone contrast slope (0.8 - 1.5)
+    public static boolean hdrCalibrated = false;    // Has the user completed display calibration
     public static boolean isHdrActive = false;     // True when swapchain is running in HDR mode
 
     // Advanced Quality & Shading Parameters
@@ -123,6 +126,9 @@ public class MCTraceConfig {
         public boolean enableHDR = true;
         public float hdrPeakLuminance = 1000.0f;
         public float hdrPaperWhite = 200.0f;
+        public float hdrMinLuminance = 0.000f;
+        public float hdrMiddleGrayContrast = 1.0f;
+        public boolean hdrCalibrated = false;
         public SsaoIntensity ssaoIntensity = SsaoIntensity.STANDARD;
         public RayQueryQuality rayQueryQuality = RayQueryQuality.BALANCED;
     }
@@ -145,6 +151,9 @@ public class MCTraceConfig {
             data.enableHDR = enableHDR;
             data.hdrPeakLuminance = hdrPeakLuminance;
             data.hdrPaperWhite = hdrPaperWhite;
+            data.hdrMinLuminance = hdrMinLuminance;
+            data.hdrMiddleGrayContrast = hdrMiddleGrayContrast;
+            data.hdrCalibrated = hdrCalibrated;
             data.ssaoIntensity = ssaoIntensity;
             data.rayQueryQuality = rayQueryQuality;
 
@@ -173,8 +182,11 @@ public class MCTraceConfig {
                     aoRadius = data.aoRadius;
                     maxBounces = data.maxBounces;
                     enableHDR = data.enableHDR;
-                    hdrPeakLuminance = data.hdrPeakLuminance;
+                    if (data.hdrPeakLuminance > 0.0f) hdrPeakLuminance = data.hdrPeakLuminance;
                     if (data.hdrPaperWhite > 0.0f) hdrPaperWhite = data.hdrPaperWhite;
+                    hdrMinLuminance = Math.max(0.0f, data.hdrMinLuminance);
+                    if (data.hdrMiddleGrayContrast > 0.0f) hdrMiddleGrayContrast = data.hdrMiddleGrayContrast;
+                    hdrCalibrated = data.hdrCalibrated;
                     if (data.ssaoIntensity != null) ssaoIntensity = data.ssaoIntensity;
                     if (data.rayQueryQuality != null) rayQueryQuality = data.rayQueryQuality;
                     MCTrace.LOGGER.info("[MCTrace] Loaded configuration from {}", path);
