@@ -62,8 +62,8 @@ vec3 F_Schlick(float cosTheta, vec3 F0) {
 
 // Emissive light source color classifier
 vec3 getEmissiveRadiance(vec3 col) {
-    // 1. Redstone dust / torch (vivid crimson)
-    if (col.r > 0.65 && col.g < 0.32 && col.b < 0.32) {
+    // 1. Redstone dust / torch (vivid crimson: very low G and B)
+    if (col.r > 0.55 && col.g < 0.16 && col.b < 0.16 && col.g < col.r * 0.25) {
         return vec3(1.0, 0.12, 0.06) * 2.2;
     }
     // 2. Soul fire / soul lantern (eerie teal cyan)
@@ -72,8 +72,9 @@ vec3 getEmissiveRadiance(vec3 col) {
     }
     // 3. Torch / lantern / campfire / lava (warm amber glow)
     // Covers bright molten magma, fire, torches, and darker lava crust
-    if ((col.r > 0.70 && col.g > 0.40 && col.g < 0.90 && col.b < 0.40) ||
-        (col.r > 0.55 && col.g > 0.20 && col.b < 0.14 && col.r > col.g * 1.25)) {
+    // Excludes metallic copper (R/B < 3.0, B >= 0.19) and gold (R/B < 7.5, R/G < 1.30, B >= 0.13)
+    if ((col.r > 0.50 && col.g >= 0.18 && col.b < 0.13 && col.r > col.g * 1.15) ||
+        (col.r > 0.70 && col.g > 0.30 && col.b < 0.35 && col.r > col.b * 3.2 && (col.r > col.g * 1.25 || (col.r > 0.88 && col.g > 0.75 && col.b < 0.18)))) {
         return vec3(1.0, 0.65, 0.22) * 2.0;
     }
     // 4. Sculk / catalyst / sensor (luminescent sculk cyan)
@@ -84,8 +85,8 @@ vec3 getEmissiveRadiance(vec3 col) {
     if (col.r > 0.45 && col.b > 0.60 && col.g < 0.55) {
         return vec3(0.75, 0.35, 1.0) * 1.9;
     }
-    // 6. Glowstone / shroomlight (warm luminescent gold)
-    if (col.r > 0.72 && col.g > 0.60 && col.b < 0.45 && col.r > col.b * 1.8) {
+    // 6. Glowstone / shroomlight (warm luminescent gold, distinct from metallic gold block)
+    if (col.r > 0.75 && col.g > 0.60 && col.b < 0.45 && col.r > col.b * 2.2 && (col.r - col.g) > 0.18) {
         return vec3(1.0, 0.80, 0.30) * 1.8;
     }
     return vec3(0.0);
@@ -193,8 +194,8 @@ void main() {
                 F0 = albedo;
                 metallicScale = 0.95;
             }
-            // Copper: rich reddish orange
-            else if (albedo.r > 0.60 && albedo.g > 0.30 && albedo.g < 0.55 && albedo.b < 0.35 && albedo.r > albedo.g * 1.25) {
+            // Copper: rich reddish orange (exclude self-emissive lava crust/fire)
+            else if (length(getEmissiveRadiance(albedo)) < 0.1 && albedo.r > 0.60 && albedo.g > 0.30 && albedo.g < 0.55 && albedo.b < 0.35 && albedo.r > albedo.g * 1.25) {
                 metallic = 0.90;
                 roughness = 0.25;
                 F0 = vec3(0.95, 0.64, 0.54);

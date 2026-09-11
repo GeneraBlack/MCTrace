@@ -82,16 +82,24 @@ void main() {
             }
             // 3. Lush green foliage & grass (dominant G, distinctly higher than R and B)
             // Warm-illuminated surfaces have high R and must NOT be shifted towards cold green
-            else if (color.g > color.r * 1.20 && color.g > color.b && color.g > 0.10) {
+            else if (color.g > color.r * 1.30 && color.g > color.b && color.g > 0.10) {
                 // Expand towards DCI-P3 green primary (-0.0420, 1.0420, -0.0786)
                 // Smoothly fade foliage expansion based on green dominance over red
                 // so warm-lit transition zones never produce a harsh boundary or radioactive tint
-                float greenDominance = smoothstep(1.20, 1.45, color.g / max(color.r, 0.001));
+                float ratio = color.g / max(color.r, 0.001);
+                float greenDominance = smoothstep(1.30, 1.70, ratio);
+
+                // Warm illumination protection:
+                // Surfaces illuminated by warm amber lava/fire have elevated linear red irradiance.
+                // Attenuate foliage green boost and preserve natural red so warm-lit terrain never turns into radioactive lime!
+                float warmRedProtection = smoothstep(0.20, 0.06, color.r);
+                float effectiveShift = greenDominance * warmRedProtection;
+
                 vec3 foliageColor;
-                foliageColor.g = color.g * 1.24 - color.r * 0.04;
-                foliageColor.r = color.r * 0.86;
-                foliageColor.b = color.b * 0.82;
-                p3Color = mix(color, foliageColor, greenDominance);
+                foliageColor.g = color.g * (1.0 + 0.24 * effectiveShift) - color.r * (0.04 * effectiveShift);
+                foliageColor.r = color.r * (1.0 - 0.14 * effectiveShift);
+                foliageColor.b = color.b * (1.0 - 0.18 * effectiveShift);
+                p3Color = foliageColor;
             }
             // 4. Crimson redstone (dominant R, very low G and B)
             else if (color.r > 0.20 && color.g < color.r * 0.40 && color.b < color.r * 0.40) {

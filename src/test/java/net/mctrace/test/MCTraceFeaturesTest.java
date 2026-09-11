@@ -126,6 +126,11 @@ public class MCTraceFeaturesTest {
 
         PbrMaterial lava = MaterialRegistry.getMaterialForBlock("minecraft:block/lava");
         assertTrue(lava.getDefaultEmission() >= 0.9f, "Lava must have high emission");
+        assertEquals(0.0f, lava.getDefaultMetallic(), 0.01f, "Molten lava is non-metallic");
+
+        PbrMaterial lavaFlowing = MaterialRegistry.getMaterialForBlock("minecraft:block/lava_flowing");
+        assertTrue(lavaFlowing.getDefaultEmission() >= 0.9f, "Flowing lava must have high emission");
+        assertEquals(0.0f, lavaFlowing.getDefaultMetallic(), 0.01f, "Flowing lava is non-metallic");
     }
 
     @Test
