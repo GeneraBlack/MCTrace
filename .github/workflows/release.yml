@@ -48,19 +48,17 @@ jobs:
       - name: Build with Gradle
         id: build
         run: |
-          ./gradlew build --no-daemon --stacktrace 2>&1 | tee gradle-build.log
-        continue-on-error: true
+          ./gradlew build --no-daemon --stacktrace > gradle-build.log 2>&1 || touch build_failed
 
       - name: Report Build Results
         run: |
-          if [ "${{ steps.build.outcome }}" != "success" ]; then
-            echo "## ❌ Gradle Build Failed" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            tail -n 120 gradle-build.log >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "## Gradle Build Output" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -n 250 gradle-build.log >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          if [ -f build_failed ]; then
+            echo "::error::Gradle build failed!"
             exit 1
-          else
-            echo "## ✔ Gradle Build Succeeded" >> $GITHUB_STEP_SUMMARY
           fi
 
       - name: Verify build artifacts
