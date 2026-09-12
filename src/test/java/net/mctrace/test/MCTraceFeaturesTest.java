@@ -38,6 +38,7 @@ public class MCTraceFeaturesTest {
         BlasManager.clearAll();
         TlasManager.destroy();
         CameraHistory.requestReset();
+        MCTraceConfig.applyPreset(MCTraceConfig.QualityPreset.BALANCED);
     }
 
     // =========================================================================
@@ -687,5 +688,174 @@ public class MCTraceFeaturesTest {
         ShaderPackLoader.setActiveShaderPackName(ShaderPackLoader.INTERNAL_PACK);
         assertEquals(ShaderPackLoader.INTERNAL_PACK, MCTraceConfig.activeShaderPack);
         ShaderPackLoader.setPostChainInvalidator(null);
+    }
+
+    // =========================================================================
+    // Next-Gen Pillars Test Suite
+    // =========================================================================
+
+    @Test
+    @DisplayName("Pillar 1: Stained Glass Colored Shadows, ReSTIR GI & RT Refraction")
+    void testPillar1RayTracingAndLighting() {
+        assertTrue(MCTraceConfig.enableColoredShadows, "Colored shadows should be active by default");
+        assertTrue(MCTraceConfig.enableRestirGi, "ReSTIR GI should be active by default");
+        assertEquals(4, MCTraceConfig.restirSpatialSamples, "Default ReSTIR spatial samples should be 4");
+        assertTrue(MCTraceConfig.enableRefraction, "Ray-traced refraction should be enabled by default");
+
+        // Verify presets affect Pillar 1 correctly
+        MCTraceConfig.applyPreset(MCTraceConfig.QualityPreset.PERFORMANCE);
+        assertFalse(MCTraceConfig.enableRestirGi, "Performance preset should disable expensive ReSTIR GI");
+        assertFalse(MCTraceConfig.enableRefraction, "Performance preset should disable refraction");
+        assertTrue(MCTraceConfig.enableColoredShadows, "Performance preset maintains colored shadows");
+
+        MCTraceConfig.applyPreset(MCTraceConfig.QualityPreset.ULTRA_HDR);
+        assertTrue(MCTraceConfig.enableRestirGi, "Ultra HDR preset should enable ReSTIR GI");
+        assertEquals(6, MCTraceConfig.restirSpatialSamples);
+        assertTrue(MCTraceConfig.enableRefraction, "Ultra HDR preset should enable refraction");
+
+        // Restore balanced
+        MCTraceConfig.applyPreset(MCTraceConfig.QualityPreset.BALANCED);
+    }
+
+    @Test
+    @DisplayName("Pillar 2: DRS Dynamic Resolution Scaling Manager & Stability")
+    void testPillar2DrsManager() {
+        MCTraceConfig.enableDrs = false;
+        MCTraceConfig.fsrQualityMode = MCTraceConfig.FsrQualityMode.OFF;
+        net.mctrace.render.drs.DRSManager.reset();
+        assertEquals(1.0f, net.mctrace.render.drs.DRSManager.getCurrentScale(), 0.001f);
+
+        // When DRS is disabled and FSR is OFF, scale remains 1.0f
+        net.mctrace.render.drs.DRSManager.update(30.0f);
+        assertEquals(1.0f, net.mctrace.render.drs.DRSManager.getCurrentScale(), 0.001f);
+
+        // When FSR is set to QUALITY, scale reflects FSR quality scale (0.67f)
+        MCTraceConfig.fsrQualityMode = MCTraceConfig.FsrQualityMode.QUALITY;
+        net.mctrace.render.drs.DRSManager.update(30.0f);
+        assertEquals(0.67f, net.mctrace.render.drs.DRSManager.getCurrentScale(), 0.01f);
+
+        // Enable DRS with 120 target FPS
+        MCTraceConfig.enableDrs = true;
+        MCTraceConfig.drsTargetFps = 120;
+
+        // Simulate severe load (30 FPS vs 120 target) over multiple frames
+        for (int i = 0; i < 40; i++) {
+            net.mctrace.render.drs.DRSManager.update(30.0f);
+        }
+
+        float scaledDown = net.mctrace.render.drs.DRSManager.getCurrentScale();
+        assertTrue(scaledDown < 1.0f, "Scale should decrease when FPS is significantly below target");
+        assertTrue(scaledDown >= 0.50f, "Scale should never drop below minimum clamp (0.50f)");
+
+        // Simulate high performance (200 FPS vs 120 target) over multiple frames
+        for (int i = 0; i < 120; i++) {
+            net.mctrace.render.drs.DRSManager.update(200.0f);
+        }
+        float scaledUp = net.mctrace.render.drs.DRSManager.getCurrentScale();
+        assertTrue(scaledUp > scaledDown, "Scale should recover when performance exceeds target");
+        assertTrue(scaledUp <= 1.0f, "Scale should never exceed 1.0f");
+
+        net.mctrace.render.drs.DRSManager.reset();
+        MCTraceConfig.enableDrs = false;
+    }
+
+    @Test
+    @DisplayName("Pillar 2: GPU Meshlet LOD Manager (VK_EXT_mesh_shader)")
+    void testPillar2MeshShaderLodManager() {
+        net.mctrace.vulkan.mesh.MeshShaderLODManager.clearMeshlets();
+        assertEquals(0, net.mctrace.vulkan.mesh.MeshShaderLODManager.getActiveMeshletCount());
+
+        // Build mock geometry with 384 vertices (128 triangles = 2 meshlets of 64 vertices)
+        int vertexCount = 384;
+        float[] positions = new float[vertexCount * 3];
+        int[] indices = new int[vertexCount];
+        for (int i = 0; i < vertexCount; i++) {
+            positions[i * 3] = (float) i;
+            positions[i * 3 + 1] = 64.0f;
+            positions[i * 3 + 2] = (float) (i % 16);
+            indices[i] = i;
+        }
+
+        net.mctrace.vulkan.mesh.MeshShaderLODManager.registerChunkMeshlets(SectionPos.of(0, 4, 0), positions, indices);
+        assertTrue(net.mctrace.vulkan.mesh.MeshShaderLODManager.getActiveMeshletCount() >= 2, "Should partition vertices into meshlets");
+
+        // Test meshlet stats
+        String stats = net.mctrace.vulkan.mesh.MeshShaderLODManager.getMeshletStats();
+        assertNotNull(stats);
+        assertTrue(stats.contains("Meshlets"), "Stats string should contain meshlet telemetry");
+
+        net.mctrace.vulkan.mesh.MeshShaderLODManager.clearMeshlets();
+        assertEquals(0, net.mctrace.vulkan.mesh.MeshShaderLODManager.getActiveMeshletCount());
+    }
+
+    @Test
+    @DisplayName("Pillar 3: Atmosphere, Volumetric Clouds & Dynamic Snow")
+    void testPillar3AtmosphereAndDynamics() {
+        assertTrue(MCTraceConfig.enableVolumetricClouds, "Volumetric clouds should be enabled by default");
+        assertEquals(1.0f, MCTraceConfig.cloudDensity, 0.001f);
+        assertTrue(MCTraceConfig.enablePhysicalSky, "Bruneton physical sky should be enabled by default");
+        assertTrue(MCTraceConfig.enableDynamicSnow, "Dynamic snow accumulation should be enabled by default");
+
+        // Test ConfigData serialization of Pillar 3
+        MCTraceConfig.ConfigData data = new MCTraceConfig.ConfigData();
+        assertTrue(data.enableVolumetricClouds);
+        assertTrue(data.enablePhysicalSky);
+        assertTrue(data.enableDynamicSnow);
+    }
+
+    @Test
+    @DisplayName("Pillar 4: Ocean FFT & Entity Subsurface Scattering Materials")
+    void testPillar4OceanAndSubsurfaceScattering() {
+        assertTrue(MCTraceConfig.enableFftOcean, "Ocean FFT waves should be enabled by default");
+        assertTrue(MCTraceConfig.enableMobSss, "Mob SSS should be enabled by default");
+
+        // Test MaterialRegistry SSS materials
+        PbrMaterial wax = MaterialRegistry.getMaterialForBlock("minecraft:block/candle");
+        assertTrue(wax.isSubsurfaceScattering(), "Candle wax must have subsurface scattering enabled");
+        assertEquals(0.85f, wax.getSssIntensity(), 0.05f);
+
+        PbrMaterial slime = MaterialRegistry.getMaterialForBlock("minecraft:block/slime_block");
+        assertTrue(slime.isSubsurfaceScattering(), "Slime block must have subsurface scattering enabled");
+        assertEquals(0.95f, slime.getSssIntensity(), 0.05f);
+
+        PbrMaterial honey = MaterialRegistry.getMaterialForBlock("minecraft:block/honey_block");
+        assertTrue(honey.isSubsurfaceScattering(), "Honey block must have subsurface scattering enabled");
+        assertEquals(0.80f, honey.getSssIntensity(), 0.05f);
+
+        // Player / Zombie mob skin heuristic
+        PbrMaterial zombie = MaterialRegistry.getMaterialForEntity("minecraft:zombie");
+        assertTrue(zombie.isSubsurfaceScattering(), "Zombie skin must have SSS enabled");
+
+        PbrMaterial player = MaterialRegistry.getMaterialForEntity("minecraft:player");
+        assertTrue(player.isSubsurfaceScattering(), "Player skin must have SSS enabled");
+    }
+
+    @Test
+    @DisplayName("Pillar 5: Vulkan GPU Profiler Telemetry & Photo Mode Config")
+    void testPillar5ProfilerAndPhotoMode() {
+        // Profiler pass tracking
+        net.mctrace.vulkan.profiler.MCTraceGpuProfiler.beginPass(net.mctrace.vulkan.profiler.MCTraceGpuProfiler.PassType.RESTIR_GI);
+        try {
+            Thread.sleep(2);
+        } catch (InterruptedException ignored) {}
+        net.mctrace.vulkan.profiler.MCTraceGpuProfiler.endPass(net.mctrace.vulkan.profiler.MCTraceGpuProfiler.PassType.RESTIR_GI);
+
+        net.mctrace.vulkan.profiler.MCTraceGpuProfiler.updateFrameMetrics();
+        assertTrue(net.mctrace.vulkan.profiler.MCTraceGpuProfiler.getPassTimeMs(net.mctrace.vulkan.profiler.MCTraceGpuProfiler.PassType.RESTIR_GI) > 0.0f);
+        assertTrue(net.mctrace.vulkan.profiler.MCTraceGpuProfiler.getTotalGpuTimeMs() > 0.0f);
+        assertTrue(net.mctrace.vulkan.profiler.MCTraceGpuProfiler.getEstimatedVramUsageMb() > 500.0f);
+
+        // Photo Mode defaults & serialization
+        assertEquals(2.8f, MCTraceConfig.photoAperture, 0.01f);
+        assertEquals(5.0f, MCTraceConfig.photoFocalDistance, 0.01f);
+        assertEquals(1.0f, MCTraceConfig.photoExposure, 0.01f);
+        assertEquals(70.0f, MCTraceConfig.photoFov, 0.01f);
+        assertEquals(7, MCTraceConfig.photoBokehBlades);
+
+        MCTraceConfig.ConfigData data = new MCTraceConfig.ConfigData();
+        assertEquals(2.8f, data.photoAperture, 0.01f);
+        assertEquals(5.0f, data.photoFocalDistance, 0.01f);
+        assertEquals(70.0f, data.photoFov, 0.01f);
+        assertEquals(7, data.photoBokehBlades);
     }
 }

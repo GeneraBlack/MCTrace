@@ -1,0 +1,57 @@
+#version 460
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+// Frame generation inputs
+layout(binding = 0, set = 0) uniform sampler2D currentFrameTexture;
+layout(binding = 1, set = 0) uniform sampler2D previousFrameTexture;
+layout(binding = 2, set = 0) uniform sampler2D velocityTexture;
+layout(binding = 3, set = 0) uniform sampler2D depthTexture;
+
+// Output Synthesized Intermediate Frame (t + 0.5)
+layout(binding = 4, set = 0, rgba16f) writeonly uniform image2D outGeneratedFrame;
+
+layout(push_constant) uniform FrameGenConstants {
+    float interpolationFactor; // 0.5 for mid-frame
+    int renderWidth;
+    int renderHeight;
+    float disocclusionThreshold;
+} pc;
+
+void main() {
+    ivec2 pixelCoord = ivec2(gl_GlobalInvocationID.xy);
+    if (pixelCoord.x >= pc.renderWidth || pixelCoord.y >= pc.renderHeight) {
+        return;
+    }
+
+    vec2 texelSize = 1.0 / vec2(pc.renderWidth, pc.renderHeight);
+    vec2 uv = (vec2(pixelCoord) + 0.5) * texelSize;
+
+    // 1. Fetch 2D screen-space velocity vector
+    vec2 velocity = texture(velocityTexture, uv).xy;
+    float depth = texture(depthTexture, uv).r;
+
+    // 2. Bidirectional optical flow remapping
+    // Forward vector to interpolate towards previous frame
+    vec2 forwardUv = uv - velocity * pc.interpolationFactor;
+    // Backward vector from previous frame projected forward
+    vec2 backwardUv = uv + velocity * (1.0 - pc.interpolationFactor);
+
+    // 3. Occlusion & Disocclusion Detection
+    // Check depth gradient along motion trajectory to prevent haloing around moving silhouettes
+    float forwardDepth = texture(depthTexture, clamp(forwardUv, 0.0, 1.0)).r;
+    float depthDisparity = abs(depth - forwardDepth);
+    float disocclusionMask = smoothstep(0.01, 0.08, depthDisparity);
+
+    // 4. Sample color along projected trajectories
+    vec4 colCurrent = texture(currentFrameTexture, uv);
+    vec4 colPrevious = texture(previousFrameTexture, clamp(forwardUv, 0.0, 1.0));
+
+    // If disoccluded (new terrain revealed), blend towards current ground truth
+    float blendAlpha = mix(pc.interpolationFactor, 1.0, disocclusionMask);
+
+    // 5. Synthesize intermediate frame
+    vec3 interpolatedColor = mix(colPrevious.rgb, colCurrent.rgb, blendAlpha);
+
+    imageStore(outGeneratedFrame, pixelCoord, vec4(interpolatedColor, 1.0));
+}

@@ -12,7 +12,8 @@
     "DebugScreenOverlayMixin",
     "PostChainAccessor",
     "PostPassAccessor",
-    "ShaderManagerMixin"
+    "ShaderManagerMixin",
+    "HudMixin"
   ],
   "injectors": {
     "defaultRequire": 1

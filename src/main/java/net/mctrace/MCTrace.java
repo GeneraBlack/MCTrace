@@ -76,9 +76,16 @@ public class MCTrace {
         event.register(MCTraceKeybinds.OPEN_CONFIG_KEY);
         event.register(MCTraceKeybinds.TOGGLE_EFFECTS_KEY);
         event.register(MCTraceKeybinds.RELOAD_SHADERS_KEY);
+        event.register(MCTraceKeybinds.TOGGLE_PROFILER_KEY);
+        event.register(MCTraceKeybinds.PHOTO_MODE_KEY);
     }
 
     private void onClientTick(final ClientTickEvent.Post event) {
+        // Update Dynamic Resolution Scaling based on current FPS
+        if (MCTraceConfig.enableDrs) {
+            net.mctrace.render.drs.DRSManager.update(net.mctrace.vulkan.profiler.MCTraceGpuProfiler.getCurrentFps());
+        }
+
         while (MCTraceKeybinds.OPEN_CONFIG_KEY.consumeClick()) {
             Minecraft mc = Minecraft.getInstance();
             if (mc.gui != null) {
@@ -106,6 +113,24 @@ public class MCTrace {
                 mc.player.sendOverlayMessage(
                         Component.literal("§6[MCTrace]§r Reloaded shaders in " + dt + " ms (" + net.mctrace.vulkan.shader.ShaderPackLoader.getActiveShaderPackName() + ")")
                 );
+            }
+        }
+
+        while (MCTraceKeybinds.TOGGLE_PROFILER_KEY.consumeClick()) {
+            MCTraceConfig.showGpuProfiler = !MCTraceConfig.showGpuProfiler;
+            MCTraceConfig.save();
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.player != null) {
+                mc.player.sendOverlayMessage(
+                        Component.literal("§6[MCTrace]§r Vulkan GPU Profiler: " + (MCTraceConfig.showGpuProfiler ? "§aEnabled" : "§cDisabled"))
+                );
+            }
+        }
+
+        while (MCTraceKeybinds.PHOTO_MODE_KEY.consumeClick()) {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.gui != null) {
+                mc.gui.setScreen(new net.mctrace.gui.MCTracePhotoModeScreen(mc.gui.screen()));
             }
         }
     }

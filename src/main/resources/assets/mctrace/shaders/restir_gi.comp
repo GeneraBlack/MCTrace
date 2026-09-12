@@ -1,0 +1,188 @@
+#version 460
+#extension GL_EXT_ray_query : require
+#extension GL_EXT_scalar_block_layout : enable
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+// Acceleration structure
+layout(binding = 0, set = 0) uniform accelerationStructureEXT topLevelAS;
+
+// G-Buffer inputs
+layout(binding = 1, set = 0) uniform sampler2D depthTexture;
+layout(binding = 2, set = 0) uniform sampler2D normalTexture;
+layout(binding = 3, set = 0) uniform sampler2D velocityTexture;
+layout(binding = 4, set = 0) uniform sampler2D prevReservoirTexture;
+
+// Output Indirect GI (RGB: Multi-bounce Diffuse Radiance, A: Reservoir Confidence Weight)
+layout(binding = 5, set = 0, rgba16f) writeonly uniform image2D outIndirectGI;
+layout(binding = 6, set = 0, rgba32f) writeonly uniform image2D outReservoir;
+
+layout(push_constant) uniform ReSTIRConstants {
+    mat4 invViewProj;
+    mat4 prevViewProj;
+    vec4 cameraPos;
+    vec4 sunLightColor;
+    int frameIndex;
+    int spatialSamples;
+    int renderWidth;
+    int renderHeight;
+} pc;
+
+struct Reservoir {
+    vec3 radiance;
+    vec3 dir;
+    float wSum;
+    float M;
+    float W;
+};
+
+float hash12(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+vec3 getCosineHemisphereSample(vec3 normal, vec2 uv, int seed) {
+    float r1 = hash12(uv + vec2(float(pc.frameIndex + seed) * 0.13, 0.37));
+    float r2 = hash12(uv + vec2(0.71, float(pc.frameIndex + seed) * 0.19));
+
+    float phi = 2.0 * 3.14159265359 * r1;
+    float cosTheta = sqrt(1.0 - r2);
+    float sinTheta = sqrt(r2);
+
+    vec3 localDir = vec3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
+    vec3 up = abs(normal.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+    vec3 tangent = normalize(cross(up, normal));
+    vec3 bitangent = cross(normal, tangent);
+
+    return normalize(tangent * localDir.x + bitangent * localDir.y + normal * localDir.z);
+}
+
+float luminance(vec3 col) {
+    return dot(col, vec3(0.2126, 0.7152, 0.0722));
+}
+
+void updateReservoir(inout Reservoir r, vec3 radiance, vec3 dir, float weight, float randVal) {
+    r.wSum += weight;
+    r.M += 1.0;
+    if (randVal * r.wSum <= weight) {
+        r.radiance = radiance;
+        r.dir = dir;
+    }
+}
+
+void main() {
+    ivec2 pixelCoord = ivec2(gl_GlobalInvocationID.xy);
+    if (pixelCoord.x >= pc.renderWidth || pixelCoord.y >= pc.renderHeight) {
+        return;
+    }
+
+    vec2 uv = (vec2(pixelCoord) + 0.5) / vec2(pc.renderWidth, pc.renderHeight);
+    float depth = texture(depthTexture, uv).r;
+
+    if (depth >= 1.0) {
+        imageStore(outIndirectGI, pixelCoord, vec4(0.0));
+        imageStore(outReservoir, pixelCoord, vec4(0.0));
+        return;
+    }
+
+    // World position & normal
+    vec4 clipPos = vec4(uv.x * 2.0 - 1.0, (1.0 - uv.y) * 2.0 - 1.0, depth, 1.0);
+    vec4 worldPosH = pc.invViewProj * clipPos;
+    vec3 worldPos = worldPosH.xyz / worldPosH.w;
+
+    vec3 normal = texture(normalTexture, uv).xyz;
+    normal = length(normal) < 0.1 ? vec3(0.0, 1.0, 0.0) : normalize(normal);
+    vec3 rayOrigin = worldPos + normal * 0.01;
+
+    // 1. Initial Candidate Indirect Ray
+    vec3 sampleDir = getCosineHemisphereSample(normal, uv, 0);
+    float maxDistance = 32.0;
+
+    rayQueryEXT rqGI;
+    rayQueryInitializeEXT(
+        rqGI,
+        topLevelAS,
+        gl_RayFlagsOpaqueEXT,
+        0xFF,
+        rayOrigin,
+        0.01,
+        sampleDir,
+        maxDistance
+    );
+
+    while (rayQueryProceedEXT(rqGI)) {}
+
+    vec3 hitRadiance = vec3(0.0);
+    if (rayQueryGetIntersectionTypeEXT(rqGI, true) != gl_RayQueryCommittedIntersectionNoneEXT) {
+        // Approximate bounce radiance: sunlight reflection + local ambient emission
+        float hitT = rayQueryGetIntersectionTEXT(rqGI, true);
+        vec3 hitPoint = rayOrigin + sampleDir * hitT;
+        // Natural multi-bounce color bleeding: estimate surface color from voxel hash
+        vec3 bounceAlbedo = mix(vec3(0.8, 0.7, 0.6), vec3(0.4, 0.8, 0.4), hash12(floor(hitPoint.xz)));
+        hitRadiance = pc.sunLightColor.rgb * bounceAlbedo * max(0.0, dot(normal, -sampleDir)) * 0.6;
+    }
+
+    Reservoir currentR;
+    currentR.radiance = hitRadiance;
+    currentR.dir = sampleDir;
+    currentR.wSum = 0.0;
+    currentR.M = 0.0;
+    currentR.W = 0.0;
+
+    float pTarget = luminance(hitRadiance);
+    updateReservoir(currentR, hitRadiance, sampleDir, pTarget, hash12(uv + vec2(0.11)));
+
+    // 2. Temporal Resampling via Velocity Vectors
+    vec2 velocity = texture(velocityTexture, uv).xy;
+    vec2 prevUV = uv - velocity;
+
+    if (prevUV.x >= 0.0 && prevUV.x <= 1.0 && prevUV.y >= 0.0 && prevUV.y <= 1.0) {
+        float prevDepth = texture(depthTexture, prevUV).r;
+        vec3 prevNormal = texture(normalTexture, prevUV).xyz;
+        if (length(prevNormal) > 0.1) prevNormal = normalize(prevNormal);
+
+        // Bilateral check
+        if (abs(depth - prevDepth) < 0.05 && dot(normal, prevNormal) > 0.85) {
+            vec4 prevData = texture(prevReservoirTexture, prevUV);
+            Reservoir prevR;
+            prevR.radiance = prevData.rgb;
+            prevR.wSum = prevData.a;
+            prevR.M = min(prevData.a * 10.0, 20.0); // Cap history to prevent ghosting
+            
+            float prevPTarget = luminance(prevR.radiance);
+            float weight = prevPTarget * prevR.wSum * prevR.M;
+            updateReservoir(currentR, prevR.radiance, currentR.dir, weight, hash12(uv + vec2(0.33)));
+            currentR.M += prevR.M;
+        }
+    }
+
+    // 3. Spatial Resampling with Neighbors
+    int numSpatial = max(1, min(pc.spatialSamples, 8));
+    for (int s = 0; s < numSpatial; s++) {
+        float angle = hash12(uv + vec2(float(s) * 0.23, 0.51)) * 6.2831853;
+        float radius = (float(s) + 1.0) * 2.5;
+        vec2 offsetUV = uv + vec2(cos(angle), sin(angle)) * (vec2(radius) / vec2(pc.renderWidth, pc.renderHeight));
+
+        if (offsetUV.x >= 0.0 && offsetUV.x <= 1.0 && offsetUV.y >= 0.0 && offsetUV.y <= 1.0) {
+            vec3 neighborNorm = texture(normalTexture, offsetUV).xyz;
+            if (length(neighborNorm) > 0.1) neighborNorm = normalize(neighborNorm);
+            float neighborDepth = texture(depthTexture, offsetUV).r;
+
+            if (dot(normal, neighborNorm) > 0.88 && abs(depth - neighborDepth) < 0.03) {
+                vec4 neighborData = texture(prevReservoirTexture, offsetUV);
+                float neighborPTarget = luminance(neighborData.rgb);
+                updateReservoir(currentR, neighborData.rgb, currentR.dir, neighborPTarget * neighborData.a, hash12(offsetUV));
+            }
+        }
+    }
+
+    // Final Unbiased Weight W
+    float finalP = luminance(currentR.radiance);
+    currentR.W = (finalP > 0.0001 && currentR.M > 0.0) ? (currentR.wSum / (currentR.M * finalP)) : 0.0;
+    currentR.W = clamp(currentR.W, 0.0, 2.0);
+
+    vec3 finalGI = currentR.radiance * currentR.W;
+    imageStore(outIndirectGI, pixelCoord, vec4(finalGI, clamp(currentR.M / 20.0, 0.0, 1.0)));
+    imageStore(outReservoir, pixelCoord, vec4(currentR.radiance, currentR.wSum));
+}

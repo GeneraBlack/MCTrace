@@ -1,0 +1,90 @@
+#version 460
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+// Output Ocean Wave Displacement (xyz: dx, dy, dz) and Foam/Spray intensity (w)
+layout(binding = 0, set = 0, rgba16f) writeonly uniform image2D outOceanDisplacement;
+// Output Ocean Normal Map (xyz) and Roughness (w)
+layout(binding = 1, set = 0, rgba16f) writeonly uniform image2D outOceanNormals;
+
+layout(push_constant) uniform OceanConstants {
+    float time;
+    float windSpeed;
+    vec2 windDirection;
+    int resolution;
+    float waveAmplitude;
+} pc;
+
+const float PI = 3.141592653589793;
+const float G = 9.81; // Gravitational acceleration
+
+// Pseudo-random Gaussian generator for wave spectra
+float hash(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+vec2 gaussianRandom(vec2 uv) {
+    float u1 = max(1e-6, hash(uv));
+    float u2 = hash(uv + vec2(13.7, 47.1));
+    float r = sqrt(-2.0 * log(u1));
+    float theta = 2.0 * PI * u2;
+    return vec2(r * cos(theta), r * sin(theta));
+}
+
+// Phillips spectrum calculation for realistic deep-ocean wind waves
+float phillips(vec2 k, vec2 windDir, float windSpeed) {
+    float kLen = length(k);
+    if (kLen < 1e-4) return 0.0;
+
+    float L = (windSpeed * windSpeed) / G;
+    float kDotW = dot(normalize(k), normalize(windDir));
+    float kDotW2 = kDotW * kDotW;
+
+    float k2 = kLen * kLen;
+    float k4 = k2 * k2;
+
+    return (pc.waveAmplitude / k4) * exp(-1.0 / (k2 * L * L)) * kDotW2;
+}
+
+void main() {
+    ivec2 pixelCoord = ivec2(gl_GlobalInvocationID.xy);
+    if (pixelCoord.x >= pc.resolution || pixelCoord.y >= pc.resolution) {
+        return;
+    }
+
+    vec2 uv = (vec2(pixelCoord) + 0.5) / float(pc.resolution);
+    vec2 k = (uv - 0.5) * 2.0 * PI * 8.0; // Wave frequency vector
+
+    float kLen = max(0.01, length(k));
+    float omega = sqrt(G * kLen); // Deep water dispersion relation
+
+    // Spectrum evaluation with time evolution
+    float p = phillips(k, pc.windDirection, pc.windSpeed);
+    vec2 gauss = gaussianRandom(uv);
+    float h0 = sqrt(p * 0.5) * gauss.x;
+
+    float phase = omega * pc.time;
+    float cosPhase = cos(phase);
+    float sinPhase = sin(phase);
+
+    // Wave height (dy) and Gerstner horizontal displacement (dx, dz)
+    float height = h0 * cosPhase;
+    vec2 horizDisp = (k / kLen) * h0 * sinPhase * 0.85;
+
+    // Jacobian determinant for foam / spray crest detection:
+    // When waves peak and steepen beyond critical limit (J < 0.3), foam forms
+    float dHdx = -k.x * h0 * sinPhase;
+    float dHdz = -k.y * h0 * sinPhase;
+    float J = (1.0 - k.x * horizDisp.x) * (1.0 - k.y * horizDisp.y) - (k.x * horizDisp.y) * (k.y * horizDisp.x);
+    float foam = clamp((0.45 - J) * 2.5, 0.0, 1.0);
+
+    // Reconstruct displaced surface normal
+    vec3 normal = normalize(vec3(-dHdx, 1.0, -dHdz));
+
+    // Store displacement (x, y, z) + foam (w)
+    imageStore(outOceanDisplacement, pixelCoord, vec4(horizDisp.x, height, horizDisp.y, foam));
+    // Store normal (xyz) + dynamic wet roughness (w)
+    imageStore(outOceanNormals, pixelCoord, vec4(normal, mix(0.02, 0.25, foam)));
+}

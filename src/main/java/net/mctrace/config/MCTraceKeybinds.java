@@ -26,4 +26,18 @@ public class MCTraceKeybinds {
             GLFW.GLFW_KEY_F4,
             KeyMapping.Category.MISC
     );
+
+    public static final KeyMapping TOGGLE_PROFILER_KEY = new KeyMapping(
+            "key.mctrace.toggle_profiler",
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_F7,
+            KeyMapping.Category.MISC
+    );
+
+    public static final KeyMapping PHOTO_MODE_KEY = new KeyMapping(
+            "key.mctrace.photo_mode",
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_F8,
+            KeyMapping.Category.MISC
+    );
 }

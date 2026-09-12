@@ -58,6 +58,12 @@ public class MaterialRegistry {
         registerMaterial(new PbrMaterial("light_sculk", 0, -1, -1, 0.25f, 0.0f, 0.9f));
         registerMaterial(new PbrMaterial("light_glowstone", 0, -1, -1, 0.75f, 0.0f, 1.0f));
         registerMaterial(new PbrMaterial("light_shroomlight", 0, -1, -1, 0.70f, 0.0f, 1.0f));
+
+        // Subsurface Scattering & Translucent Materials (Mobs, Skin, Wax, Slime)
+        registerMaterial(new PbrMaterial("entity_skin", 0, -1, -1, 0.45f, 0.0f, 0.0f, 0.0f, 0.0f, true, 0.85f));
+        registerMaterial(new PbrMaterial("entity_wax", 0, -1, -1, 0.35f, 0.0f, 0.0f, 0.0f, 0.0f, true, 0.85f));
+        registerMaterial(new PbrMaterial("block_slime", 0, -1, -1, 0.12f, 0.0f, 0.0f, 0.0f, 0.0f, true, 0.95f));
+        registerMaterial(new PbrMaterial("block_honey", 0, -1, -1, 0.15f, 0.0f, 0.0f, 0.0f, 0.0f, true, 0.80f));
     }
 
     public static void registerMaterial(PbrMaterial material) {
@@ -66,6 +72,20 @@ public class MaterialRegistry {
 
     public static PbrMaterial getMaterial(String name) {
         return MATERIALS.getOrDefault(name, PbrMaterial.DEFAULT);
+    }
+
+    /**
+     * Resolves material properties for Minecraft entities (players, mobs, animals).
+     */
+    public static PbrMaterial getMaterialForEntity(String identifier) {
+        if (identifier == null) return PbrMaterial.DEFAULT;
+        String lower = identifier.toLowerCase();
+        if (lower.contains("player") || lower.contains("steve") || lower.contains("alex") ||
+            lower.contains("zombie") || lower.contains("villager") || lower.contains("pig") ||
+            lower.contains("cow") || lower.contains("sheep") || lower.contains("human")) {
+            return getMaterial("entity_skin");
+        }
+        return getMaterialForBlock(identifier);
     }
 
     /**
@@ -113,6 +133,10 @@ public class MaterialRegistry {
         if (lower.contains("redstone")) return getMaterial("light_redstone");
         if (lower.contains("torch") || lower.contains("lantern") || lower.contains("campfire") || lower.contains("lava")) return getMaterial("light_torch");
         if (lower.contains("leaves") || lower.contains("foliage") || lower.contains("vine")) return getMaterial("block_leaves");
+        if (lower.contains("skin") || lower.contains("steve") || lower.contains("alex") || lower.contains("zombie") || lower.contains("villager")) return getMaterial("entity_skin");
+        if (lower.contains("candle") || lower.contains("wax")) return getMaterial("entity_wax");
+        if (lower.contains("slime")) return getMaterial("block_slime");
+        if (lower.contains("honey")) return getMaterial("block_honey");
         if (lower.contains("dirt") || lower.contains("mud") || lower.contains("clay") || lower.contains("grass_block")) return getMaterial("block_dirt");
         if (lower.contains("wood") || lower.contains("planks") || lower.contains("log") || lower.contains("stem")) return getMaterial("block_wood");
         if (lower.contains("stone") || lower.contains("cobblestone") || lower.contains("gravel") || lower.contains("sand")) return getMaterial("block_stone");

@@ -446,6 +446,58 @@ void main() {
     // Multiply diffuse dynamic light by surface albedo so warm amber light realistically warms terrain
     vec3 shaded = rawColor.rgb * (aoFactor + directSunMod + dynamicRadiosity + foliageSss) + pbrSpecular;
 
+    // Bruneton / Nishita Physical Atmospheric Scattering & 3D Volumetric Clouds
+    if (isSky) {
+        vec3 skyDir = normalize(vec3((texCoord.x * 2.0 - 1.0) * 0.75, -(texCoord.y * 2.0 - 1.0) * 0.75, 1.0));
+        float cosTheta = dot(skyDir, sunDir);
+        float sunElev = sin(skyAngle * 2.0 * PI);
+        float dayWeight = clamp(sunElev * 2.5 + 0.15, 0.0, 1.0);
+        float sunsetWeight = clamp(1.0 - abs(sunElev) * 4.5, 0.0, 1.0) * (1.0 - rainLevel);
+
+        // Rayleigh scattering (blue wavelength dominant)
+        vec3 betaRayleigh = vec3(5.8e-3, 13.5e-3, 33.1e-3);
+        float rayleighPhase = (3.0 / (16.0 * PI)) * (1.0 + cosTheta * cosTheta);
+        // Mie scattering (sun halo / atmospheric aerosols)
+        float gMie = 0.76;
+        float miePhase = henyeyGreenstein(cosTheta, gMie);
+        // Ozone absorption (creates deep twilight purple/indigo)
+        vec3 ozoneAbsorption = vec3(0.065, 0.188, 0.008) * sunsetWeight;
+
+        vec3 skyRayleigh = betaRayleigh * rayleighPhase * dayWeight * 40.0;
+        vec3 skyMie = vec3(0.8, 0.6, 0.4) * miePhase * (dayWeight + sunsetWeight * 2.0) * 0.15;
+        vec3 skyAtmosphere = (skyRayleigh + skyMie) * (1.0 - ozoneAbsorption);
+        shaded = mix(shaded, clamp(skyAtmosphere, 0.0, 1.0), 0.65);
+
+        // 3D Ray-Marched Volumetric Clouds (Altitude y=192 to y=320)
+        if (skyDir.y > 0.02 && rainLevel < 0.9) {
+            float cloudMinY = 192.0;
+            float cloudMaxY = 320.0;
+            float tMin = cloudMinY / max(skyDir.y, 0.001);
+            float tMax = cloudMaxY / max(skyDir.y, 0.001);
+            if (tMin > 0.0 && tMax > tMin) {
+                float stepSize = (tMax - tMin) / 10.0;
+                float cloudDensityAccum = 0.0;
+                vec3 curPos = skyDir * tMin;
+                for (int c = 0; c < 10; c++) {
+                    curPos += skyDir * stepSize;
+                    vec3 cCoord = curPos * 0.003 + vec3(time * 0.015, 0.0, time * 0.008);
+                    float w1 = sin(cCoord.x * 4.0) * cos(cCoord.z * 4.0) * sin(cCoord.y * 2.0);
+                    float w2 = sin(cCoord.x * 8.0 + 1.3) * cos(cCoord.z * 8.0 + 2.1);
+                    float noise = clamp(w1 * 0.6 + w2 * 0.4, 0.0, 1.0);
+                    float heightGrad = smoothstep(cloudMinY, cloudMinY + 30.0, curPos.y) * smoothstep(cloudMaxY, cloudMaxY - 30.0, curPos.y);
+                    float sampleD = smoothstep(0.42, 0.85, noise) * heightGrad;
+                    cloudDensityAccum += sampleD * 0.25;
+                    if (cloudDensityAccum >= 1.0) break;
+                }
+                cloudDensityAccum = clamp(cloudDensityAccum, 0.0, 1.0);
+                vec3 cloudSunColor = mix(vec3(1.0, 0.95, 0.88), vec3(1.0, 0.45, 0.15), sunsetWeight);
+                vec3 cloudAmbient = mix(vec3(0.05, 0.08, 0.15), vec3(0.70, 0.82, 0.95), dayWeight);
+                vec3 cloudLit = mix(cloudAmbient, cloudSunColor * 1.8, max(cosTheta, 0.0) * 0.75 + 0.25);
+                shaded = mix(shaded, cloudLit, cloudDensityAccum);
+            }
+        }
+    }
+
     // 6. Screen-Space Water & Glass Reflections (SSR) + Caustics + Rain Puddles
     if (enableWaterReflections && !isSky) {
         bool isWater = (rawColor.b > rawColor.r + 0.14 && rawColor.b > 0.22 && normal.y > 0.55);
@@ -507,7 +559,49 @@ void main() {
                 vec3 causticLight = vec3(0.18, 0.85, 1.0) * caustics * shadow * max(dot(normal, sunDir), 0.0);
                 shaded += causticLight * 0.35;
             }
+
+            // Ray-Traced Refraction with Chromatic Dispersion
+            if (isWater || isGlass || isIce) {
+                float etaBase = isWater ? (1.0 / 1.333) : (isGlass ? (1.0 / 1.52) : (1.0 / 1.31));
+                float dispersion = 0.012; // Chromatic aberration factor
+                vec3 refrR = refract(-viewDir, waveNorm, etaBase - dispersion);
+                vec3 refrG = refract(-viewDir, waveNorm, etaBase);
+                vec3 refrB = refract(-viewDir, waveNorm, etaBase + dispersion);
+
+                vec2 uvR = clamp(texCoord + refrR.xy * 0.025, 0.0, 1.0);
+                vec2 uvG = clamp(texCoord + refrG.xy * 0.025, 0.0, 1.0);
+                vec2 uvB = clamp(texCoord + refrB.xy * 0.025, 0.0, 1.0);
+
+                vec3 refractedCol = vec3(
+                    texture(MainSampler, uvR).r,
+                    texture(MainSampler, uvG).g,
+                    texture(MainSampler, uvB).b
+                );
+                shaded = mix(shaded, refractedCol, (1.0 - fresnel) * 0.60);
+            }
         }
+    }
+
+    // Dynamic Procedural Snow Accumulation & Torch Melting
+    if (!isSky && normal.y > 0.65 && rainWetness > 0.05) {
+        float snowNoise = sin(pos.x * 1.4 + 0.3) * cos(pos.z * 1.4 + 0.7) * 0.5 + 0.5;
+        float snowMask = smoothstep(0.40, 0.75, snowNoise) * min(rainWetness * 1.5, 1.0);
+        // Heat sources melt snow locally
+        float heatMelting = clamp(heldIntensity * 1.5, 0.0, 1.0);
+        snowMask = clamp(snowMask - heatMelting, 0.0, 1.0);
+
+        vec3 snowColor = vec3(0.95, 0.97, 1.0);
+        float sparkle = pow(hash12(floor(pos.xz * 32.0)), 12.0) * 0.6;
+        snowColor += vec3(sparkle) * max(dot(normal, sunDir), 0.0);
+        shaded = mix(shaded, snowColor * (0.45 + shadow * 0.55), snowMask * 0.85);
+    }
+
+    // Subsurface Scattering for Mobs & Players (Translucent Skin / Wax / Slime)
+    if (enableFoliageSss && !isSky && !isWater && (rawColor.r > rawColor.b * 1.25 && rawColor.g > rawColor.b && rawColor.r > 0.35)) {
+        float backLight = max(0.0, dot(-viewDir, sunDir));
+        float sss = pow(backLight, 3.5) * foliageSssStrength * 0.40;
+        vec3 sssColor = vec3(0.92, 0.32, 0.15) * sss * (1.0 - shadow * 0.6);
+        shaded += sssColor;
     }
 
     // 6b. Atmospheric Crepuscular God Rays & Volumetric Aerial Perspective

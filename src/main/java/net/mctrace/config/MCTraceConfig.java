@@ -199,6 +199,40 @@ public class MCTraceConfig {
     public static boolean enableRtShadows = true;           // Hardware TLAS Ray-Traced Direct Shadows & Penumbra
     public static String activeShaderPack = "internal";     // Active shader pack name ("internal" or custom pack in shaderpacks/)
 
+    // =========================================================================
+    // Next-Gen Expansion: 5 Major Pillars
+    // =========================================================================
+    // Pillar 1: Next-Gen Ray Tracing & Lighting
+    public static boolean enableColoredShadows = true;      // Stained glass / tinted colored light transmission
+    public static boolean enableRestirGi = true;            // ReSTIR Spatio-Temporal Resampled Multi-Bounce GI
+    public static int restirSpatialSamples = 4;             // Spatial neighbor reservoir samples (1 to 8)
+    public static boolean enableRefraction = true;          // Ray-traced refraction with chromatic dispersion
+
+    // Pillar 2: Performance, Upscaling & Geometry
+    public static boolean enableFrameGeneration = false;    // AMD FSR 3 Fluid Motion Frame Generation
+    public static boolean enableDrs = false;                // Dynamic Resolution Scaling (Target FPS mode)
+    public static int drsTargetFps = 120;                   // Target FPS for DRS adjustments
+    public static boolean enableMeshShaders = true;         // GPU-driven meshlet LOD for distant terrain (VK_EXT_mesh_shader)
+
+    // Pillar 3: Atmosphere, Weather & World Dynamics
+    public static boolean enableVolumetricClouds = true;    // Ray-marched 3D Perlin-Worley volumetric clouds
+    public static float cloudDensity = 1.0f;                // Cloud volume density multiplier
+    public static boolean enablePhysicalSky = true;         // Bruneton / Nishita atmospheric scattering & twilight
+    public static boolean enableDynamicSnow = true;         // Dynamic procedural snow accumulation on upward faces
+
+    // Pillar 4: Ocean & Materials Realism
+    public static boolean enableFftOcean = true;            // Compute Phillips spectrum FFT ocean waves & foam
+    public static boolean enableMobSss = true;              // Subsurface scattering on players, mobs, candles, slime
+
+    // Pillar 5: Creator & Player Tools
+    public static boolean showGpuProfiler = false;          // Real-time Vulkan timestamp query profiler HUD overlay
+    public static boolean photoModeActive = false;          // Cinematic Photo Mode active flag
+    public static float photoAperture = 2.8f;               // Lens aperture (f-number: 1.2 to 16.0)
+    public static float photoFocalDistance = 5.0f;          // Focal plane distance in meters
+    public static float photoExposure = 1.0f;               // Exposure EV multiplier (0.5x to 2.0x)
+    public static float photoFov = 70.0f;                   // Camera FOV in degrees (15 to 110)
+    public static int photoBokehBlades = 7;                 // Number of aperture iris blades (0 = circle, 5, 7, 9)
+
     // Advanced Quality & Shading Parameters
     public static QualityPreset currentPreset = QualityPreset.BALANCED;
     public static SsaoIntensity ssaoIntensity = SsaoIntensity.STANDARD;
@@ -231,6 +265,18 @@ public class MCTraceConfig {
                 foliageSssStrength = 0.7f;
                 enableLabPbrTextures = true;
                 enableRtShadows = false;
+                enableColoredShadows = true;
+                enableRestirGi = false;
+                enableRefraction = false;
+                enableFrameGeneration = true;
+                enableDrs = true;
+                drsTargetFps = 120;
+                enableMeshShaders = true;
+                enableVolumetricClouds = false;
+                enablePhysicalSky = true;
+                enableDynamicSnow = true;
+                enableFftOcean = false;
+                enableMobSss = false;
             }
             case BALANCED -> {
                 enableRayTracing = true;
@@ -257,6 +303,19 @@ public class MCTraceConfig {
                 foliageSssStrength = 1.0f;
                 enableLabPbrTextures = true;
                 enableRtShadows = true;
+                enableColoredShadows = true;
+                enableRestirGi = true;
+                restirSpatialSamples = 4;
+                enableRefraction = true;
+                enableFrameGeneration = false;
+                enableDrs = false;
+                enableMeshShaders = true;
+                enableVolumetricClouds = true;
+                cloudDensity = 1.0f;
+                enablePhysicalSky = true;
+                enableDynamicSnow = true;
+                enableFftOcean = true;
+                enableMobSss = true;
             }
             case ULTRA_HDR -> {
                 enableRayTracing = true;
@@ -284,6 +343,19 @@ public class MCTraceConfig {
                 foliageSssStrength = 1.25f;
                 enableLabPbrTextures = true;
                 enableRtShadows = true;
+                enableColoredShadows = true;
+                enableRestirGi = true;
+                restirSpatialSamples = 6;
+                enableRefraction = true;
+                enableFrameGeneration = false;
+                enableDrs = false;
+                enableMeshShaders = true;
+                enableVolumetricClouds = true;
+                cloudDensity = 1.25f;
+                enablePhysicalSky = true;
+                enableDynamicSnow = true;
+                enableFftOcean = true;
+                enableMobSss = true;
             }
             case CUSTOM -> {}
         }
@@ -332,6 +404,28 @@ public class MCTraceConfig {
         public boolean enableLabPbrTextures = true;
         public boolean enableRtShadows = true;
         public String activeShaderPack = "internal";
+
+        // Next-Gen Expansion Fields
+        public boolean enableColoredShadows = true;
+        public boolean enableRestirGi = true;
+        public int restirSpatialSamples = 4;
+        public boolean enableRefraction = true;
+        public boolean enableFrameGeneration = false;
+        public boolean enableDrs = false;
+        public int drsTargetFps = 120;
+        public boolean enableMeshShaders = true;
+        public boolean enableVolumetricClouds = true;
+        public float cloudDensity = 1.0f;
+        public boolean enablePhysicalSky = true;
+        public boolean enableDynamicSnow = true;
+        public boolean enableFftOcean = true;
+        public boolean enableMobSss = true;
+        public boolean showGpuProfiler = false;
+        public float photoAperture = 2.8f;
+        public float photoFocalDistance = 5.0f;
+        public float photoExposure = 1.0f;
+        public float photoFov = 70.0f;
+        public int photoBokehBlades = 7;
     }
 
     public static synchronized void save() {
@@ -381,6 +475,27 @@ public class MCTraceConfig {
             data.enableLabPbrTextures = enableLabPbrTextures;
             data.enableRtShadows = enableRtShadows;
             data.activeShaderPack = activeShaderPack;
+
+            data.enableColoredShadows = enableColoredShadows;
+            data.enableRestirGi = enableRestirGi;
+            data.restirSpatialSamples = restirSpatialSamples;
+            data.enableRefraction = enableRefraction;
+            data.enableFrameGeneration = enableFrameGeneration;
+            data.enableDrs = enableDrs;
+            data.drsTargetFps = drsTargetFps;
+            data.enableMeshShaders = enableMeshShaders;
+            data.enableVolumetricClouds = enableVolumetricClouds;
+            data.cloudDensity = cloudDensity;
+            data.enablePhysicalSky = enablePhysicalSky;
+            data.enableDynamicSnow = enableDynamicSnow;
+            data.enableFftOcean = enableFftOcean;
+            data.enableMobSss = enableMobSss;
+            data.showGpuProfiler = showGpuProfiler;
+            data.photoAperture = photoAperture;
+            data.photoFocalDistance = photoFocalDistance;
+            data.photoExposure = photoExposure;
+            data.photoFov = photoFov;
+            data.photoBokehBlades = photoBokehBlades;
 
             Files.writeString(path, GSON.toJson(data));
             MCTrace.LOGGER.info("[MCTrace] Saved configuration to {}", path);
@@ -442,6 +557,28 @@ public class MCTraceConfig {
                         activeShaderPack = data.activeShaderPack;
                         net.mctrace.vulkan.shader.ShaderPackLoader.setActiveShaderPackName(activeShaderPack);
                     }
+
+                    enableColoredShadows = data.enableColoredShadows;
+                    enableRestirGi = data.enableRestirGi;
+                    if (data.restirSpatialSamples > 0) restirSpatialSamples = data.restirSpatialSamples;
+                    enableRefraction = data.enableRefraction;
+                    enableFrameGeneration = data.enableFrameGeneration;
+                    enableDrs = data.enableDrs;
+                    if (data.drsTargetFps > 0) drsTargetFps = data.drsTargetFps;
+                    enableMeshShaders = data.enableMeshShaders;
+                    enableVolumetricClouds = data.enableVolumetricClouds;
+                    if (data.cloudDensity > 0.0f) cloudDensity = data.cloudDensity;
+                    enablePhysicalSky = data.enablePhysicalSky;
+                    enableDynamicSnow = data.enableDynamicSnow;
+                    enableFftOcean = data.enableFftOcean;
+                    enableMobSss = data.enableMobSss;
+                    showGpuProfiler = data.showGpuProfiler;
+                    if (data.photoAperture > 0.0f) photoAperture = data.photoAperture;
+                    if (data.photoFocalDistance > 0.0f) photoFocalDistance = data.photoFocalDistance;
+                    if (data.photoExposure > 0.0f) photoExposure = data.photoExposure;
+                    if (data.photoFov > 0.0f) photoFov = data.photoFov;
+                    if (data.photoBokehBlades >= 0) photoBokehBlades = data.photoBokehBlades;
+
                     MCTrace.LOGGER.info("[MCTrace] Loaded configuration from {}", path);
                 }
             } else {

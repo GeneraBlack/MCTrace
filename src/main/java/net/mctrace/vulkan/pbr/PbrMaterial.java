@@ -27,6 +27,8 @@ public class PbrMaterial {
     private final float defaultEmission;
     private final float porosity;
     private final float pomDepth;
+    private final boolean subsurfaceScattering;
+    private final float sssIntensity;
 
     public PbrMaterial(
             String name,
@@ -37,7 +39,7 @@ public class PbrMaterial {
             float defaultMetallic,
             float defaultEmission
     ) {
-        this(name, albedoIndex, normalIndex, specularIndex, defaultRoughness, defaultMetallic, defaultEmission, 0.0f, 0.0f);
+        this(name, albedoIndex, normalIndex, specularIndex, defaultRoughness, defaultMetallic, defaultEmission, 0.0f, 0.0f, false, 0.0f);
     }
 
     public PbrMaterial(
@@ -51,6 +53,22 @@ public class PbrMaterial {
             float porosity,
             float pomDepth
     ) {
+        this(name, albedoIndex, normalIndex, specularIndex, defaultRoughness, defaultMetallic, defaultEmission, porosity, pomDepth, false, 0.0f);
+    }
+
+    public PbrMaterial(
+            String name,
+            int albedoIndex,
+            int normalIndex,
+            int specularIndex,
+            float defaultRoughness,
+            float defaultMetallic,
+            float defaultEmission,
+            float porosity,
+            float pomDepth,
+            boolean subsurfaceScattering,
+            float sssIntensity
+    ) {
         this.name = name;
         this.albedoIndex = albedoIndex;
         this.normalIndex = normalIndex;
@@ -60,6 +78,8 @@ public class PbrMaterial {
         this.defaultEmission = defaultEmission;
         this.porosity = porosity;
         this.pomDepth = pomDepth;
+        this.subsurfaceScattering = subsurfaceScattering;
+        this.sssIntensity = sssIntensity;
     }
 
     public float getPorosity() {
@@ -104,5 +124,13 @@ public class PbrMaterial {
 
     public boolean hasSpecularMap() {
         return specularIndex >= 0;
+    }
+
+    public boolean isSubsurfaceScattering() {
+        return subsurfaceScattering;
+    }
+
+    public float getSssIntensity() {
+        return sssIntensity;
     }
 }
