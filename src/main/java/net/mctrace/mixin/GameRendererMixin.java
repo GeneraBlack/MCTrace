@@ -7,6 +7,8 @@ import net.mctrace.config.MCTraceConfig;
 import net.mctrace.render.camera.CameraHistory;
 import net.mctrace.render.gbuffer.GBufferManager;
 import net.mctrace.vulkan.rt.CompositePipeline;
+import net.mctrace.vulkan.rt.DenoiserPipeline;
+import net.mctrace.vulkan.rt.FsrPipeline;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GameRenderer;
@@ -57,9 +59,26 @@ public abstract class GameRendererMixin {
             int w = this.mainRenderTarget.width;
             int h = this.mainRenderTarget.height;
             if (w > 0 && h > 0) {
+                net.mctrace.vulkan.profiler.MCTraceGpuProfiler.beginPass(net.mctrace.vulkan.profiler.MCTraceGpuProfiler.PassType.GBUFFER);
                 GBufferManager.initOrResize(w, h);
+                net.mctrace.vulkan.profiler.MCTraceGpuProfiler.endPass(net.mctrace.vulkan.profiler.MCTraceGpuProfiler.PassType.GBUFFER);
+
                 Vector3f sunDir = new Vector3f(0.5f, 0.8f, 0.3f).normalize();
+                if (MCTraceConfig.enableRtShadows) {
+                    net.mctrace.vulkan.profiler.MCTraceGpuProfiler.beginPass(net.mctrace.vulkan.profiler.MCTraceGpuProfiler.PassType.RT_SHADOWS);
+                }
                 CompositePipeline.dispatch(w, h, sunDir, 0.5f);
+                if (MCTraceConfig.enableRtShadows) {
+                    net.mctrace.vulkan.profiler.MCTraceGpuProfiler.endPass(net.mctrace.vulkan.profiler.MCTraceGpuProfiler.PassType.RT_SHADOWS);
+                }
+
+                if (MCTraceConfig.enableRestirGi) {
+                    net.mctrace.vulkan.profiler.MCTraceGpuProfiler.beginPass(net.mctrace.vulkan.profiler.MCTraceGpuProfiler.PassType.RESTIR_GI);
+                    net.mctrace.vulkan.profiler.MCTraceGpuProfiler.endPass(net.mctrace.vulkan.profiler.MCTraceGpuProfiler.PassType.RESTIR_GI);
+                    net.mctrace.vulkan.profiler.MCTraceGpuProfiler.beginPass(net.mctrace.vulkan.profiler.MCTraceGpuProfiler.PassType.DENOISER);
+                    DenoiserPipeline.advanceFrame();
+                    net.mctrace.vulkan.profiler.MCTraceGpuProfiler.endPass(net.mctrace.vulkan.profiler.MCTraceGpuProfiler.PassType.DENOISER);
+                }
 
                 if (this.minecraft != null && this.minecraft.isGameLoadFinished() && this.minecraft.getShaderManager() != null) {
                     try {
@@ -68,8 +87,10 @@ public abstract class GameRendererMixin {
                                 LevelTargetBundle.MAIN_TARGETS
                         );
                         if (worldChain != null) {
+                            net.mctrace.vulkan.profiler.MCTraceGpuProfiler.beginPass(net.mctrace.vulkan.profiler.MCTraceGpuProfiler.PassType.ATMOSPHERE_CLOUDS);
                             mctrace$updateCompositeUniforms(worldChain);
                             worldChain.process(this.mainRenderTarget, this.resourcePool);
+                            net.mctrace.vulkan.profiler.MCTraceGpuProfiler.endPass(net.mctrace.vulkan.profiler.MCTraceGpuProfiler.PassType.ATMOSPHERE_CLOUDS);
                         }
                     } catch (Throwable t) {
                         if (!loggedActive) {
@@ -87,6 +108,16 @@ public abstract class GameRendererMixin {
             int w = this.mainRenderTarget.width;
             int h = this.mainRenderTarget.height;
             if (w > 0 && h > 0) {
+                if (MCTraceConfig.enableFftOcean) {
+                    net.mctrace.vulkan.profiler.MCTraceGpuProfiler.beginPass(net.mctrace.vulkan.profiler.MCTraceGpuProfiler.PassType.WATER_FFT);
+                    net.mctrace.vulkan.profiler.MCTraceGpuProfiler.endPass(net.mctrace.vulkan.profiler.MCTraceGpuProfiler.PassType.WATER_FFT);
+                }
+                if (MCTraceConfig.enableFrameGeneration) {
+                    net.mctrace.vulkan.profiler.MCTraceGpuProfiler.beginPass(net.mctrace.vulkan.profiler.MCTraceGpuProfiler.PassType.FSR_FRAMEGEN);
+                    FsrPipeline.prepareDispatch(w, h, w, h);
+                    net.mctrace.vulkan.profiler.MCTraceGpuProfiler.endPass(net.mctrace.vulkan.profiler.MCTraceGpuProfiler.PassType.FSR_FRAMEGEN);
+                }
+
                 if (this.minecraft != null && this.minecraft.isGameLoadFinished() && this.minecraft.getShaderManager() != null) {
                     try {
                         PostChain compositeChain = this.minecraft.getShaderManager().getPostChain(
@@ -94,8 +125,10 @@ public abstract class GameRendererMixin {
                                 LevelTargetBundle.MAIN_TARGETS
                         );
                         if (compositeChain != null) {
+                            net.mctrace.vulkan.profiler.MCTraceGpuProfiler.beginPass(net.mctrace.vulkan.profiler.MCTraceGpuProfiler.PassType.COMPOSITE_HDR);
                             mctrace$updateCompositeUniforms(compositeChain);
                             compositeChain.process(this.mainRenderTarget, this.resourcePool);
+                            net.mctrace.vulkan.profiler.MCTraceGpuProfiler.endPass(net.mctrace.vulkan.profiler.MCTraceGpuProfiler.PassType.COMPOSITE_HDR);
                             if (!loggedActive) {
                                 loggedActive = true;
                                 MCTrace.LOGGER.info("[MCTrace] Final frame display calibration & HDR tone mapping active ({}x{}).", w, h);

@@ -88,7 +88,15 @@ public class MCTrace {
 
         while (MCTraceKeybinds.OPEN_CONFIG_KEY.consumeClick()) {
             Minecraft mc = Minecraft.getInstance();
-            if (mc.gui != null) {
+            long handle = mc.getWindow() != null ? mc.getWindow().handle() : 0L;
+            boolean shiftHeld = handle != 0L && (
+                    org.lwjgl.glfw.GLFW.glfwGetKey(handle, org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT_SHIFT) == org.lwjgl.glfw.GLFW.GLFW_PRESS ||
+                    org.lwjgl.glfw.GLFW.glfwGetKey(handle, org.lwjgl.glfw.GLFW.GLFW_KEY_RIGHT_SHIFT) == org.lwjgl.glfw.GLFW.GLFW_PRESS
+            );
+
+            if (shiftHeld) {
+                cycleProfiler(mc);
+            } else if (mc.gui != null) {
                 mc.gui.setScreen(new MCTraceConfigScreen(mc.gui.screen()));
             }
         }
@@ -117,14 +125,8 @@ public class MCTrace {
         }
 
         while (MCTraceKeybinds.TOGGLE_PROFILER_KEY.consumeClick()) {
-            MCTraceConfig.showGpuProfiler = !MCTraceConfig.showGpuProfiler;
-            MCTraceConfig.save();
             Minecraft mc = Minecraft.getInstance();
-            if (mc.player != null) {
-                mc.player.sendOverlayMessage(
-                        Component.literal("§6[MCTrace]§r Vulkan GPU Profiler: " + (MCTraceConfig.showGpuProfiler ? "§aEnabled" : "§cDisabled"))
-                );
-            }
+            cycleProfiler(mc);
         }
 
         while (MCTraceKeybinds.PHOTO_MODE_KEY.consumeClick()) {
@@ -132,6 +134,15 @@ public class MCTrace {
             if (mc.gui != null) {
                 mc.gui.setScreen(new net.mctrace.gui.MCTracePhotoModeScreen(mc.gui.screen()));
             }
+        }
+    }
+
+    private void cycleProfiler(Minecraft mc) {
+        net.mctrace.vulkan.profiler.MCTraceGpuProfiler.cycleMode();
+        if (mc.player != null) {
+            mc.player.sendOverlayMessage(
+                    Component.literal("§6[MCTrace]§r GPU Profiler: §a" + MCTraceConfig.profilerMode.getDisplayName())
+            );
         }
     }
 }

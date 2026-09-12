@@ -3,6 +3,8 @@ package net.mctrace.gui;
 import net.mctrace.config.MCTraceConfig;
 import net.mctrace.render.camera.CameraHistory;
 import net.mctrace.render.gbuffer.GBufferManager;
+import net.mctrace.vulkan.pbr.HDTextureOptimizer;
+import net.mctrace.vulkan.profiler.MCTraceGpuProfiler;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.CycleButton;
@@ -455,23 +457,64 @@ public class MCTraceConfigScreen extends Screen {
                                 })
         );
 
-        // Row 6: Vulkan GPU Profiler HUD & Launch Photo Mode
+        // Row 6: Vulkan GPU Profiler Mode & HD Texture Pack Optimizer
         this.addRenderableWidget(
-                CycleButton.onOffBuilder(MCTraceConfig.showGpuProfiler)
+                CycleButton.<MCTraceGpuProfiler.ProfilerDisplayMode>builder(
+                                mode -> Component.literal("Profiler: " + mode.getDisplayName()),
+                                MCTraceConfig.profilerMode
+                        )
+                        .withValues(MCTraceGpuProfiler.ProfilerDisplayMode.values())
                         .create(col1X, startY + spacing * 6, buttonWidth, buttonHeight,
-                                Component.literal("Vulkan GPU Profiler HUD"),
+                                Component.literal("GPU Profiler Mode"),
                                 (btn, val) -> {
-                                    MCTraceConfig.showGpuProfiler = val;
+                                    MCTraceConfig.profilerMode = val;
+                                    MCTraceConfig.showGpuProfiler = (val != MCTraceGpuProfiler.ProfilerDisplayMode.OFF);
                                     MCTraceConfig.save();
                                 })
         );
 
         this.addRenderableWidget(
+                CycleButton.<HDTextureOptimizer.TextureResolutionLimit>builder(
+                                limit -> Component.literal("HD Tex: " + limit.getDisplayName()),
+                                MCTraceConfig.hdTextureMode
+                        )
+                        .withValues(HDTextureOptimizer.TextureResolutionLimit.values())
+                        .create(col2X, startY + spacing * 6, buttonWidth, buttonHeight,
+                                Component.literal("HD Texture Optimizer"),
+                                (btn, val) -> {
+                                    MCTraceConfig.hdTextureMode = val;
+                                    MCTraceConfig.save();
+                                })
+        );
+
+        // Row 7: Distance POM LoD & Toksvig Specular AA
+        this.addRenderableWidget(
+                CycleButton.onOffBuilder(MCTraceConfig.enableDistancePomLod)
+                        .create(col1X, startY + spacing * 7, buttonWidth, buttonHeight,
+                                Component.literal("Distance POM LoD"),
+                                (btn, val) -> {
+                                    MCTraceConfig.enableDistancePomLod = val;
+                                    MCTraceConfig.save();
+                                })
+        );
+
+        this.addRenderableWidget(
+                CycleButton.onOffBuilder(MCTraceConfig.enableSpecularAntiAliasing)
+                        .create(col2X, startY + spacing * 7, buttonWidth, buttonHeight,
+                                Component.literal("Toksvig Specular AA"),
+                                (btn, val) -> {
+                                    MCTraceConfig.enableSpecularAntiAliasing = val;
+                                    MCTraceConfig.save();
+                                })
+        );
+
+        // Row 8: Launch Photo Mode
+        this.addRenderableWidget(
                 Button.builder(Component.literal("§d📷 Launch Photo Mode [F8]...§r"), btn -> {
                     if (this.minecraft != null) {
                         this.minecraft.gui.setScreen(new MCTracePhotoModeScreen(this));
                     }
-                }).bounds(col2X, startY + spacing * 6, buttonWidth, buttonHeight).build()
+                }).bounds(col1X, startY + spacing * 8, buttonWidth * 2 + 16, buttonHeight).build()
         );
     }
 

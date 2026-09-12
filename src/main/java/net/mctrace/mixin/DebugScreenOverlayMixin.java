@@ -42,6 +42,18 @@ public abstract class DebugScreenOverlayMixin {
                 lines.add(" AMD FSR: §7Off (Native Resolution)§r");
             }
             lines.add(" Lighting: §f" + MCTraceConfig.rayTracingMode.name() + "§r | SSAO: §e" + MCTraceConfig.ssaoIntensity.name() + "§r");
+            if (MCTraceConfig.showGpuProfiler) {
+                lines.add(String.format(" GPU Frame: §a%.2f ms§r (%.1f FPS) | VRAM: §e%.1f MB§r",
+                        net.mctrace.vulkan.profiler.MCTraceGpuProfiler.getTotalGpuTimeMs(),
+                        net.mctrace.vulkan.profiler.MCTraceGpuProfiler.getCurrentFps(),
+                        net.mctrace.vulkan.profiler.MCTraceGpuProfiler.getEstimatedVramUsageMb()));
+                for (var pass : net.mctrace.vulkan.profiler.MCTraceGpuProfiler.PassType.values()) {
+                    float t = net.mctrace.vulkan.profiler.MCTraceGpuProfiler.getPassTimeMs(pass);
+                    if (t > 0.05f) {
+                        lines.add(String.format("   • %s: §6%.2f ms§r", pass.getDisplayName(), t));
+                    }
+                }
+            }
         }
     }
 }

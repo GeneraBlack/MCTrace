@@ -169,30 +169,37 @@ void main() {
 
         // Parallax Occlusion Mapping (POM) 3D surface relief
         if (pomDepth > 0.005) {
-            vec3 dPdx = dFdx(pos);
-            vec3 dPdy = dFdy(pos);
-            vec2 dUdx = dFdx(texCoord);
-            vec2 dUdy = dFdy(texCoord);
-            vec3 tangent = normalize(dPdx * dUdy.y - dPdy * dUdx.y);
-            vec3 bitangent = cross(normal, tangent);
-            mat3 TBN = mat3(tangent, bitangent, normal);
-            vec3 tangentView = normalize(transpose(TBN) * viewDir);
+            // Distance-Adaptive POM LoD: scale raymarching steps down as distance increases.
+            // Beyond 24 blocks, POM relief is sub-pixel and wastes massive texture cache bandwidth.
+            float pomDistanceFactor = clamp(1.0 - (depth - 6.0) / 18.0, 0.0, 1.0);
+            if (pomDistanceFactor > 0.05) {
+                vec3 dPdx = dFdx(pos);
+                vec3 dPdy = dFdy(pos);
+                vec2 dUdx = dFdx(texCoord);
+                vec2 dUdy = dFdy(texCoord);
+                vec3 tangent = normalize(dPdx * dUdy.y - dPdy * dUdx.y);
+                vec3 bitangent = cross(normal, tangent);
+                mat3 TBN = mat3(tangent, bitangent, normal);
+                vec3 tangentView = normalize(transpose(TBN) * viewDir);
 
-            float numLayers = 8.0;
-            float layerDepth = 1.0 / numLayers;
-            float currentLayerDepth = 0.0;
-            vec2 deltaTexCoords = tangentView.xy * pomDepth / (abs(tangentView.z) * numLayers + 0.001);
-            vec2 pomCoord = texCoord;
-            float currentDepthMapValue = 1.0 - dot(texture(MainSampler, pomCoord).rgb, vec3(0.299, 0.587, 0.114));
+                int maxSteps = int(mix(2.0, 10.0, pomDistanceFactor));
+                float numLayers = float(maxSteps);
+                float layerDepth = 1.0 / numLayers;
+                float currentLayerDepth = 0.0;
+                vec2 deltaTexCoords = tangentView.xy * pomDepth / (abs(tangentView.z) * numLayers + 0.001);
+                vec2 pomCoord = texCoord;
+                float currentDepthMapValue = 1.0 - dot(texture(MainSampler, pomCoord).rgb, vec3(0.299, 0.587, 0.114));
 
-            for (int step = 0; step < 8; step++) {
-                if (currentLayerDepth >= currentDepthMapValue) break;
-                pomCoord -= deltaTexCoords;
-                currentDepthMapValue = 1.0 - dot(texture(MainSampler, pomCoord).rgb, vec3(0.299, 0.587, 0.114));
-                currentLayerDepth += layerDepth;
+                for (int step = 0; step < 10; step++) {
+                    if (step >= maxSteps) break;
+                    if (currentLayerDepth >= currentDepthMapValue) break;
+                    pomCoord -= deltaTexCoords;
+                    currentDepthMapValue = 1.0 - dot(texture(MainSampler, pomCoord).rgb, vec3(0.299, 0.587, 0.114));
+                    currentLayerDepth += layerDepth;
+                }
+                float selfShadow = clamp(1.0 - (currentLayerDepth - currentDepthMapValue) * 2.0, 0.70, 1.0);
+                shadow *= selfShadow;
             }
-            float selfShadow = clamp(1.0 - (currentLayerDepth - currentDepthMapValue) * 2.0, 0.70, 1.0);
-            shadow *= selfShadow;
         }
 
         // 1. Multi-tap Screen Space Ambient Occlusion (SSAO)
@@ -339,9 +346,17 @@ void main() {
                 normal = normalize(normal + rippleNorm);
             }
 
+            // Toksvig Specular Anti-Aliasing (Geometric normal variance filtering)
+            // Ultra-high-res packs (512x/1024x) cause extreme specular shimmering/glitter
+            // due to sub-pixel normal variation. Filtering roughness preserves energy and eliminates flicker.
+            vec3 dNdx = dFdx(normal);
+            vec3 dNdy = dFdy(normal);
+            float normalVariance = clamp(dot(dNdx, dNdx) + dot(dNdy, dNdy), 0.0, 0.4);
+            float filteredRoughness = clamp(sqrt(roughness * roughness + normalVariance), 0.04, 1.0);
+
             // Cook-Torrance Specular Model
-            float NDF = D_GGX(NdotH, roughness);
-            float G = G_Smith(NdotV, NdotL, roughness);
+            float NDF = D_GGX(NdotH, filteredRoughness);
+            float G = G_Smith(NdotV, NdotL, filteredRoughness);
             vec3 F = F_Schlick(VdotH, F0);
 
             vec3 specNumerator = NDF * G * F;

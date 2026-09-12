@@ -13,8 +13,11 @@ import net.mctrace.vulkan.rt.SectionGeometry;
 import net.mctrace.vulkan.rt.TlasManager;
 import net.minecraft.core.SectionPos;
 import net.minecraft.world.phys.Vec3;
+import net.mctrace.vulkan.pbr.HDTextureOptimizer;
+import net.mctrace.vulkan.profiler.MCTraceGpuProfiler;
 import org.joml.Matrix4f;
 import org.joml.Vector2f;
+import org.joml.Vector3f;
 import net.mctrace.vulkan.shader.ShaderPackLoader;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -834,16 +837,34 @@ public class MCTraceFeaturesTest {
     @DisplayName("Pillar 5: Vulkan GPU Profiler Telemetry & Photo Mode Config")
     void testPillar5ProfilerAndPhotoMode() {
         // Profiler pass tracking
-        net.mctrace.vulkan.profiler.MCTraceGpuProfiler.beginPass(net.mctrace.vulkan.profiler.MCTraceGpuProfiler.PassType.RESTIR_GI);
+        MCTraceGpuProfiler.beginPass(MCTraceGpuProfiler.PassType.RESTIR_GI);
         try {
             Thread.sleep(2);
         } catch (InterruptedException ignored) {}
-        net.mctrace.vulkan.profiler.MCTraceGpuProfiler.endPass(net.mctrace.vulkan.profiler.MCTraceGpuProfiler.PassType.RESTIR_GI);
+        MCTraceGpuProfiler.endPass(MCTraceGpuProfiler.PassType.RESTIR_GI);
 
-        net.mctrace.vulkan.profiler.MCTraceGpuProfiler.updateFrameMetrics();
-        assertTrue(net.mctrace.vulkan.profiler.MCTraceGpuProfiler.getPassTimeMs(net.mctrace.vulkan.profiler.MCTraceGpuProfiler.PassType.RESTIR_GI) > 0.0f);
-        assertTrue(net.mctrace.vulkan.profiler.MCTraceGpuProfiler.getTotalGpuTimeMs() > 0.0f);
-        assertTrue(net.mctrace.vulkan.profiler.MCTraceGpuProfiler.getEstimatedVramUsageMb() > 500.0f);
+        MCTraceGpuProfiler.updateFrameMetrics();
+        assertTrue(MCTraceGpuProfiler.getPassTimeMs(MCTraceGpuProfiler.PassType.RESTIR_GI) > 0.0f);
+        assertTrue(MCTraceGpuProfiler.getTotalGpuTimeMs() > 0.0f);
+        assertTrue(MCTraceGpuProfiler.getEstimatedVramUsageMb() > 500.0f);
+
+        // Profiler display mode cycling: OFF -> COMPACT -> DETAILED -> OFF
+        MCTraceConfig.profilerMode = MCTraceGpuProfiler.ProfilerDisplayMode.OFF;
+        assertEquals(MCTraceGpuProfiler.ProfilerDisplayMode.COMPACT, MCTraceGpuProfiler.ProfilerDisplayMode.OFF.next());
+        assertEquals(MCTraceGpuProfiler.ProfilerDisplayMode.DETAILED, MCTraceGpuProfiler.ProfilerDisplayMode.COMPACT.next());
+        assertEquals(MCTraceGpuProfiler.ProfilerDisplayMode.OFF, MCTraceGpuProfiler.ProfilerDisplayMode.DETAILED.next());
+
+        MCTraceGpuProfiler.cycleMode();
+        assertEquals(MCTraceGpuProfiler.ProfilerDisplayMode.COMPACT, MCTraceConfig.profilerMode);
+        assertTrue(MCTraceConfig.showGpuProfiler);
+
+        MCTraceGpuProfiler.cycleMode();
+        assertEquals(MCTraceGpuProfiler.ProfilerDisplayMode.DETAILED, MCTraceConfig.profilerMode);
+        assertTrue(MCTraceConfig.showGpuProfiler);
+
+        MCTraceGpuProfiler.cycleMode();
+        assertEquals(MCTraceGpuProfiler.ProfilerDisplayMode.OFF, MCTraceConfig.profilerMode);
+        assertFalse(MCTraceConfig.showGpuProfiler);
 
         // Photo Mode defaults & serialization
         assertEquals(2.8f, MCTraceConfig.photoAperture, 0.01f);
@@ -857,5 +878,60 @@ public class MCTraceFeaturesTest {
         assertEquals(5.0f, data.photoFocalDistance, 0.01f);
         assertEquals(70.0f, data.photoFov, 0.01f);
         assertEquals(7, data.photoBokehBlades);
+        assertEquals(MCTraceGpuProfiler.ProfilerDisplayMode.OFF, data.profilerMode);
+    }
+
+    @Test
+    @DisplayName("HD Texture Pack Optimizer: VRAM Budget, Adaptive POM LoD & Toksvig Specular AA")
+    void testHdTextureOptimizerAndVramBudgets() {
+        // 1. Pack Detection
+        HDTextureOptimizer.updateDetectedTexturePack(512, 512);
+        assertTrue(HDTextureOptimizer.isHdPackDetected(), "512x pack must be detected as HD");
+        assertEquals(512, HDTextureOptimizer.getDetectedResolution());
+
+        // 2. VRAM Estimates for 3 LabPBR atlases (_d, _n, _s)
+        float vram1024Native = HDTextureOptimizer.estimateTextureVramMb(1024, HDTextureOptimizer.TextureResolutionLimit.NATIVE_1024);
+        float vram512Balanced = HDTextureOptimizer.estimateTextureVramMb(1024, HDTextureOptimizer.TextureResolutionLimit.BALANCED_512);
+        float vram256Perf = HDTextureOptimizer.estimateTextureVramMb(1024, HDTextureOptimizer.TextureResolutionLimit.PERFORMANCE_256);
+
+        assertTrue(vram1024Native >= 4000.0f, "1024x native atlas must exceed 4GB VRAM footprint");
+        assertTrue(vram512Balanced <= 3100.0f && vram512Balanced > 2000.0f, "512x balanced profile caps atlas to ~3GB");
+        assertTrue(vram256Perf <= 800.0f, "256x performance profile caps atlas to ~768MB");
+
+        // 3. Distance-Adaptive POM LoD Step Scaling
+        MCTraceConfig.enableDistancePomLod = true;
+        int closeSteps = HDTextureOptimizer.calculateAdaptivePomSteps(2.0f, 0.8f);
+        int midSteps = HDTextureOptimizer.calculateAdaptivePomSteps(10.0f, 0.8f);
+        int distantSteps = HDTextureOptimizer.calculateAdaptivePomSteps(18.0f, 0.8f);
+        int farSteps = HDTextureOptimizer.calculateAdaptivePomSteps(30.0f, 0.8f);
+
+        assertTrue(closeSteps >= 12, "Close up POM must use full depth steps (>=12)");
+        assertEquals(8, midSteps, "Mid distance POM (6-12m) uses 8 steps");
+        assertEquals(4, distantSteps, "Distant POM (12-24m) uses 4 steps");
+        assertEquals(0, farSteps, "Beyond 24m, POM is disabled (0 steps) to preserve memory bandwidth");
+
+        // When disabled, returns constant 32 steps
+        MCTraceConfig.enableDistancePomLod = false;
+        assertEquals(32, HDTextureOptimizer.calculateAdaptivePomSteps(30.0f, 0.8f));
+        MCTraceConfig.enableDistancePomLod = true;
+
+        // 4. Toksvig Specular Anti-Aliasing (Normal Variance Filtering)
+        MCTraceConfig.enableSpecularAntiAliasing = true;
+        float baseRoughness = 0.15f; // Smooth shiny stone/metal
+        Vector3f zeroVariance = new Vector3f(0.0f, 0.0f, 0.0f);
+        Vector3f noisyNormals = new Vector3f(0.25f, 0.25f, 0.0f); // High-res normal map micro-facets
+
+        float smoothResult = HDTextureOptimizer.applyToksvigRoughness(baseRoughness, zeroVariance);
+        float filteredResult = HDTextureOptimizer.applyToksvigRoughness(baseRoughness, noisyNormals);
+
+        assertEquals(baseRoughness, smoothResult, 0.001f, "Zero normal variance preserves original specular roughness");
+        assertTrue(filteredResult > baseRoughness, "Toksvig filter must widen roughness on noisy normals to kill specular flickering");
+        assertTrue(filteredResult <= 1.0f, "Roughness must stay clamped within [0, 1]");
+
+        // 5. Config Defaults & Serialization
+        MCTraceConfig.ConfigData data = new MCTraceConfig.ConfigData();
+        assertEquals(HDTextureOptimizer.TextureResolutionLimit.BALANCED_512, data.hdTextureMode);
+        assertTrue(data.enableDistancePomLod);
+        assertTrue(data.enableSpecularAntiAliasing);
     }
 }

@@ -225,6 +225,7 @@ public class MCTraceConfig {
     public static boolean enableMobSss = true;              // Subsurface scattering on players, mobs, candles, slime
 
     // Pillar 5: Creator & Player Tools
+    public static net.mctrace.vulkan.profiler.MCTraceGpuProfiler.ProfilerDisplayMode profilerMode = net.mctrace.vulkan.profiler.MCTraceGpuProfiler.ProfilerDisplayMode.OFF;
     public static boolean showGpuProfiler = false;          // Real-time Vulkan timestamp query profiler HUD overlay
     public static boolean photoModeActive = false;          // Cinematic Photo Mode active flag
     public static float photoAperture = 2.8f;               // Lens aperture (f-number: 1.2 to 16.0)
@@ -232,6 +233,11 @@ public class MCTraceConfig {
     public static float photoExposure = 1.0f;               // Exposure EV multiplier (0.5x to 2.0x)
     public static float photoFov = 70.0f;                   // Camera FOV in degrees (15 to 110)
     public static int photoBokehBlades = 7;                 // Number of aperture iris blades (0 = circle, 5, 7, 9)
+
+    // HD Texture Pack Optimization (512x / 1024x / 2048x)
+    public static net.mctrace.vulkan.pbr.HDTextureOptimizer.TextureResolutionLimit hdTextureMode = net.mctrace.vulkan.pbr.HDTextureOptimizer.TextureResolutionLimit.BALANCED_512;
+    public static boolean enableDistancePomLod = true;      // Scale POM raymarching steps down with distance
+    public static boolean enableSpecularAntiAliasing = true;// Toksvig normal map variance filtering
 
     // Advanced Quality & Shading Parameters
     public static QualityPreset currentPreset = QualityPreset.BALANCED;
@@ -426,6 +432,10 @@ public class MCTraceConfig {
         public float photoExposure = 1.0f;
         public float photoFov = 70.0f;
         public int photoBokehBlades = 7;
+        public net.mctrace.vulkan.profiler.MCTraceGpuProfiler.ProfilerDisplayMode profilerMode = net.mctrace.vulkan.profiler.MCTraceGpuProfiler.ProfilerDisplayMode.OFF;
+        public net.mctrace.vulkan.pbr.HDTextureOptimizer.TextureResolutionLimit hdTextureMode = net.mctrace.vulkan.pbr.HDTextureOptimizer.TextureResolutionLimit.BALANCED_512;
+        public boolean enableDistancePomLod = true;
+        public boolean enableSpecularAntiAliasing = true;
     }
 
     public static synchronized void save() {
@@ -496,6 +506,10 @@ public class MCTraceConfig {
             data.photoExposure = photoExposure;
             data.photoFov = photoFov;
             data.photoBokehBlades = photoBokehBlades;
+            data.profilerMode = profilerMode;
+            data.hdTextureMode = hdTextureMode;
+            data.enableDistancePomLod = enableDistancePomLod;
+            data.enableSpecularAntiAliasing = enableSpecularAntiAliasing;
 
             Files.writeString(path, GSON.toJson(data));
             MCTrace.LOGGER.info("[MCTrace] Saved configuration to {}", path);
@@ -578,6 +592,11 @@ public class MCTraceConfig {
                     if (data.photoExposure > 0.0f) photoExposure = data.photoExposure;
                     if (data.photoFov > 0.0f) photoFov = data.photoFov;
                     if (data.photoBokehBlades >= 0) photoBokehBlades = data.photoBokehBlades;
+                    if (data.profilerMode != null) profilerMode = data.profilerMode;
+                    showGpuProfiler = (profilerMode != net.mctrace.vulkan.profiler.MCTraceGpuProfiler.ProfilerDisplayMode.OFF);
+                    if (data.hdTextureMode != null) hdTextureMode = data.hdTextureMode;
+                    enableDistancePomLod = data.enableDistancePomLod;
+                    enableSpecularAntiAliasing = data.enableSpecularAntiAliasing;
 
                     MCTrace.LOGGER.info("[MCTrace] Loaded configuration from {}", path);
                 }

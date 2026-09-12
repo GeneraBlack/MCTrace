@@ -3,6 +3,7 @@ package net.mctrace.vulkan.profiler;
 import net.mctrace.config.MCTraceConfig;
 import net.mctrace.render.drs.DRSManager;
 import net.mctrace.render.gbuffer.GBufferManager;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
@@ -13,9 +14,33 @@ import java.util.Map;
 /**
  * Vulkan GPU Profiler for MCTrace.
  * Tracks per-pass GPU and pipeline execution times, VRAM allocation estimates,
- * and renders an overlay HUD with a stacked timing bar and telemetry metrics.
+ * and renders an overlay HUD supporting both Compact Bar and Detailed Telemetry modes.
  */
 public class MCTraceGpuProfiler {
+
+    public enum ProfilerDisplayMode {
+        OFF("Off"),
+        COMPACT("Compact Bar"),
+        DETAILED("Detailed Telemetry");
+
+        private final String displayName;
+
+        ProfilerDisplayMode(String displayName) {
+            this.displayName = displayName;
+        }
+
+        public String getDisplayName() {
+            return displayName;
+        }
+
+        public ProfilerDisplayMode next() {
+            return switch (this) {
+                case OFF -> COMPACT;
+                case COMPACT -> DETAILED;
+                case DETAILED -> OFF;
+            };
+        }
+    }
 
     public enum PassType {
         GBUFFER("G-Buffer Pass", 0xFF3B82F6),               // Royal Blue
@@ -52,6 +77,7 @@ public class MCTraceGpuProfiler {
     private static float smoothedTotalTimeMs = 0.0f;
     private static float currentFps = 60.0f;
     private static long lastFrameTimestamp = System.nanoTime();
+    private static boolean hasRealMeasurements = false;
 
     static {
         for (PassType type : PassType.values()) {
@@ -72,12 +98,19 @@ public class MCTraceGpuProfiler {
             passTimesMs.put(type, durationMs);
 
             float currentSmooth = smoothedPassTimesMs.getOrDefault(type, durationMs);
-            smoothedPassTimesMs.put(type, currentSmooth * 0.92f + durationMs * 0.08f);
+            smoothedPassTimesMs.put(type, currentSmooth * 0.90f + durationMs * 0.10f);
+            hasRealMeasurements = true;
         }
     }
 
+    public static void cycleMode() {
+        MCTraceConfig.profilerMode = MCTraceConfig.profilerMode.next();
+        MCTraceConfig.showGpuProfiler = (MCTraceConfig.profilerMode != ProfilerDisplayMode.OFF);
+        MCTraceConfig.save();
+    }
+
     /**
-     * Called once per frame to update rolling metrics and calibrate timings based on active features.
+     * Called once per frame to update rolling metrics.
      */
     public static void updateFrameMetrics() {
         long now = System.nanoTime();
@@ -87,25 +120,25 @@ public class MCTraceGpuProfiler {
         float frameTimeMs = (float) (deltaNs / 1_000_000.0);
         if (frameTimeMs > 0.1f && frameTimeMs < 500.0f) {
             float instantFps = 1000.0f / frameTimeMs;
-            currentFps = currentFps * 0.9f + instantFps * 0.1f;
+            currentFps = currentFps * 0.90f + instantFps * 0.10f;
         }
 
-        // Calibrate simulated baseline for passes when active
-        simulatePassTimingsIfIdle();
+        if (!hasRealMeasurements) {
+            simulatePassTimingsIfIdle();
+        }
 
         float sum = 0.0f;
         for (PassType type : PassType.values()) {
             sum += smoothedPassTimesMs.getOrDefault(type, 0.0f);
         }
         totalGpuTimeMs = sum;
-        smoothedTotalTimeMs = smoothedTotalTimeMs * 0.9f + totalGpuTimeMs * 0.1f;
+        smoothedTotalTimeMs = smoothedTotalTimeMs * 0.90f + totalGpuTimeMs * 0.10f;
     }
 
     private static void simulatePassTimingsIfIdle() {
         float scale = DRSManager.getCurrentScale();
         float resFactor = scale * scale;
 
-        // Baseline realistic GPU timings for active passes on modern GPUs
         setSimulated(PassType.GBUFFER, 1.15f * resFactor);
         setSimulated(PassType.RT_SHADOWS, MCTraceConfig.enableRtShadows ? (MCTraceConfig.enableColoredShadows ? 2.30f : 1.80f) * resFactor : 0.0f);
         setSimulated(PassType.RESTIR_GI, MCTraceConfig.enableRestirGi ? (1.90f + MCTraceConfig.restirSpatialSamples * 0.25f) * resFactor : 0.0f);
@@ -133,9 +166,6 @@ public class MCTraceGpuProfiler {
         return currentFps;
     }
 
-    /**
-     * Estimated VRAM in megabytes based on internal buffer sizes, TLAS/BLAS, and ReSTIR history.
-     */
     public static float getEstimatedVramUsageMb() {
         int w = GBufferManager.getRenderWidth();
         int h = GBufferManager.getRenderHeight();
@@ -144,45 +174,89 @@ public class MCTraceGpuProfiler {
             h = 1080;
         }
 
-        // RGBA16F G-Buffer targets (Albedo, Normal, Position, Motion, Depth, etc. ~ 6 targets * 8 bytes/pixel)
         float gbufferMb = (w * h * 8.0f * 6.0f) / (1024.0f * 1024.0f);
-
-        // ReSTIR Reservoirs (Current + Previous frame ~ 32 bytes/pixel * 2)
         float restirMb = MCTraceConfig.enableRestirGi ? (w * h * 64.0f) / (1024.0f * 1024.0f) : 0.0f;
-
-        // BVH Acceleration Structures (BLAS chunks + TLAS)
         float bvhMb = 140.0f;
-
-        // FFT ocean textures & dispersion tables
         float oceanMb = MCTraceConfig.enableFftOcean ? 32.0f : 0.0f;
-
-        // Base Minecraft swapchain & textures
         float baseMb = 580.0f;
 
         return baseMb + gbufferMb + restirMb + bvhMb + oceanMb;
     }
 
     /**
-     * Renders the GPU Profiler HUD overlay using Minecraft's GuiGraphicsExtractor.
+     * Renders the GPU Profiler HUD overlay based on the active display mode.
      */
     public static void renderHud(GuiGraphicsExtractor extractor, Font font) {
-        if (!MCTraceConfig.showGpuProfiler) {
+        if (MCTraceConfig.profilerMode == ProfilerDisplayMode.OFF && !MCTraceConfig.showGpuProfiler) {
             return;
         }
 
         updateFrameMetrics();
 
-        int x = 10;
-        int y = 10;
-        int panelWidth = 240;
-        int panelHeight = 224;
+        // If in COMPACT mode, render minimal top bar
+        if (MCTraceConfig.profilerMode == ProfilerDisplayMode.COMPACT) {
+            renderCompactBar(extractor, font);
+            return;
+        }
+
+        // Otherwise render DETAILED panel
+        renderDetailedPanel(extractor, font);
+    }
+
+    private static void renderCompactBar(GuiGraphicsExtractor extractor, Font font) {
+        int x = 8;
+        int y = 8;
+        int width = 310;
+        int height = 18;
+
+        // Background
+        extractor.fill(x, y, x + width, y + height, 0xCC0D1117);
+        extractor.fill(x, y + height - 2, x + width, y + height, 0xFF3B82F6);
+
+        int fpsColor = currentFps >= 90.0f ? 0x55FF55 : (currentFps >= 50.0f ? 0xFFFF55 : 0xFF5555);
+        String fpsText = String.format("%.0f FPS", currentFps);
+        String gpuText = String.format("%.2f ms", smoothedTotalTimeMs);
+        String drsText = MCTraceConfig.enableDrs ? String.format("%.0f%% DRS", DRSManager.getCurrentScale() * 100.0f) : "Native";
+        String vramText = String.format("%.0f MB", getEstimatedVramUsageMb());
+
+        String barContent = String.format("§6§lMC§r §7|§r §f%s§r §7(%s)§r §7|§r §b%s§r §7|§r §e%s§r", fpsText, gpuText, drsText, vramText);
+        extractor.text(font, Component.literal(barContent), x + 6, y + 4, 0xFFFFFF);
+
+        // Mini stacked bar underneath
+        int barW = width - 4;
+        int barX = x + 2;
+        int curX = barX;
+        for (PassType pass : PassType.values()) {
+            float time = smoothedPassTimesMs.getOrDefault(pass, 0.0f);
+            if (time <= 0.01f || smoothedTotalTimeMs <= 0.01f) continue;
+            int seg = Math.max(1, (int) ((time / smoothedTotalTimeMs) * barW));
+            if (curX + seg > barX + barW) seg = (barX + barW) - curX;
+            if (seg > 0) {
+                extractor.fill(curX, y + height - 2, curX + seg, y + height, pass.getColor());
+                curX += seg;
+            }
+        }
+    }
+
+    private static void renderDetailedPanel(GuiGraphicsExtractor extractor, Font font) {
+        int x = 8;
+        int y = 8;
+        int panelWidth = 244;
+        int panelHeight = 226;
+
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.getWindow() != null) {
+            int screenH = mc.getWindow().getGuiScaledHeight();
+            if (panelHeight > screenH - 16) {
+                panelHeight = Math.max(160, screenH - 16);
+            }
+        }
 
         // Glassmorphic panel background
         extractor.fill(x, y, x + panelWidth, y + panelHeight, 0xDD0D1117);
 
-        // Accent top border
+        // Accent top border & outline
         extractor.fill(x, y, x + panelWidth, y + 2, 0xFF3B82F6);
-        // Border outline
         extractor.fill(x, y + 2, x + 1, y + panelHeight, 0x4430363D);
         extractor.fill(x + panelWidth - 1, y + 2, x + panelWidth, y + panelHeight, 0x4430363D);
         extractor.fill(x, y + panelHeight - 1, x + panelWidth, y + panelHeight, 0x4430363D);
@@ -199,12 +273,8 @@ public class MCTraceGpuProfiler {
         // Resolution & DRS
         int renderW = GBufferManager.getRenderWidth();
         int renderH = GBufferManager.getRenderHeight();
-        int nativeW = GBufferManager.getNativeWidth();
-        int nativeH = GBufferManager.getNativeHeight();
         if (renderW <= 0) renderW = 1920;
         if (renderH <= 0) renderH = 1080;
-        if (nativeW <= 0) nativeW = renderW;
-        if (nativeH <= 0) nativeH = renderH;
 
         int scalePct = (int) (DRSManager.getCurrentScale() * 100.0f);
         String drsInfo = MCTraceConfig.enableDrs ? "§aDRS " + scalePct + "%§r" : (MCTraceConfig.enableFSR ? "§bFSR " + MCTraceConfig.fsrQualityMode.name() + "§r" : "§7Native§r");
@@ -224,10 +294,8 @@ public class MCTraceGpuProfiler {
             float time = smoothedPassTimesMs.getOrDefault(pass, 0.0f);
             float pct = smoothedTotalTimeMs > 0.001f ? (time / smoothedTotalTimeMs) * 100.0f : 0.0f;
 
-            // Colored bullet indicator
             extractor.fill(x + 8, rowY + 3, x + 14, rowY + 9, pass.getColor());
 
-            // Pass name and time
             String timeStr = String.format("%.2f ms", time);
             String pctStr = String.format("%4.1f%%", pct);
 
@@ -261,6 +329,6 @@ public class MCTraceGpuProfiler {
             }
         }
 
-        extractor.text(font, "§8[Shift+F6/F7] Toggle HUD | [F8] Photo Mode§r", x + 8, y + panelHeight - 11, 0x888888);
+        extractor.text(font, "§8[F7 / Shift+F6] Cycle Mode | [F8] Photo Mode§r", x + 8, y + panelHeight - 11, 0x888888);
     }
 }
